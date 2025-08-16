@@ -39,7 +39,7 @@ app.use((req, res, next) => {
   next();
 });
 
-(async () => {
+async function createApp() {
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -59,15 +59,29 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Default to 3001 for development, 5000 for production
-  // this serves both the API and the client.
-  const port = parseInt(process.env.PORT || (process.env.NODE_ENV === 'development' ? '3001' : '5000'), 10);
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
-    log(`serving on port ${port}`);
-  });
-})();
+  return { app, server };
+}
+
+// Export the handler for Vercel serverless functions
+export default async function handler(req: any, res: any) {
+  const { app } = await createApp();
+  return app(req, res);
+}
+
+// Traditional server setup for local development (only if not in Vercel)
+if (!process.env.VERCEL) {
+  (async () => {
+    const { server } = await createApp();
+    
+    // ALWAYS serve the app on the port specified in the environment variable PORT
+    // Default to 3001 for development, 5000 for production
+    const port = parseInt(process.env.PORT || (process.env.NODE_ENV === 'development' ? '3001' : '5000'), 10);
+    server.listen({
+      port,
+      host: "0.0.0.0",
+      reusePort: true,
+    }, () => {
+      log(`serving on port ${port}`);
+    });
+  })();
+}

@@ -16,6 +16,7 @@ POSTGRES_DATABASE=neondb
 ### Google APIs
 ```
 GOOGLE_API_KEY=AIzaSyDzCNdsTvLg7ECyGsWZEzkwmYbHIxoIODo
+GOOGLE_PAGESPEED_API_KEY=AIzaSyDzCNdsTvLg7ECyGsWZEzkwmYbHIxoIODo
 ```
 
 ### Session Configuration
@@ -33,6 +34,7 @@ STACK_SECRET_SERVER_KEY=ssk_pewsw7xctz536w63em2kxcd1jebgfdmpy01gwb8bstq3r
 ### Runtime Configuration
 ```
 NODE_ENV=production
+VERCEL=1
 ```
 
 ## Setup Instructions
