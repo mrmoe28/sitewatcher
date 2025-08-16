@@ -13,13 +13,8 @@ interface PageSpeedInsightsResult {
 }
 
 class SEOAnalyzer {
-  private apiKey: string;
-
-  constructor() {
-    this.apiKey = process.env.GOOGLE_PAGESPEED_API_KEY || process.env.GOOGLE_API_KEY || "";
-    if (!this.apiKey) {
-      console.warn("Google PageSpeed Insights API key not found. SEO analysis will be limited.");
-    }
+  private getApiKey(): string {
+    return process.env.GOOGLE_PAGESPEED_API_KEY || process.env.GOOGLE_API_KEY || "";
   }
 
   async analyzeUrl(url: string, analysisId: string): Promise<void> {
@@ -31,12 +26,13 @@ class SEOAnalyzer {
         statusMessage: "Starting PageSpeed analysis..."
       });
 
-      if (!this.apiKey) {
+      const apiKey = this.getApiKey();
+      if (!apiKey) {
         throw new Error("Google PageSpeed Insights API key not configured");
       }
 
       // Call Google PageSpeed Insights API
-      const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&key=${this.apiKey}&category=performance&category=accessibility&category=best-practices&category=seo`;
+      const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&key=${apiKey}&category=performance&category=accessibility&category=best-practices&category=seo`;
       
       await storage.updateAnalysis(analysisId, {
         progress: 30,
