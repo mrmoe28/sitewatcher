@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { MultiProgress } from "@/components/ui/multi-progress";
 import { useProgress } from "@/hooks/use-progress";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery } from "@tanstack/react-query";
 import { 
   FileText, 
   Globe, 
@@ -29,12 +30,7 @@ import {
   Zap
 } from "lucide-react";
 
-// Mock data for demonstration
-const mockSites = [
-  { id: "1", domain: "example.com", url: "https://example.com" },
-  { id: "2", domain: "demo.com", url: "https://demo.com" },
-  { id: "3", domain: "test.org", url: "https://test.org" }
-];
+// Component moved inside to access hooks
 
 const mockNotes = [
   {
@@ -109,6 +105,12 @@ export default function Notes() {
     getActiveOperations
   } = useProgress();
 
+  // Fetch real sites from API
+  const { data: sites = [] } = useQuery({
+    queryKey: ["/api/sites"],
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+
   const activeOperations = getActiveOperations();
   const crawlerOperation = activeOperations.find(op => op.type === "site-comparison"); // Using existing type for demo
 
@@ -124,7 +126,7 @@ export default function Notes() {
   });
 
   const handleAnalyzeSite = async (siteId: string) => {
-    const site = mockSites.find(s => s.id === siteId);
+    const site = sites.find(s => s.id === siteId);
     if (!site) return;
 
     setIsAnalyzing(true);
@@ -250,7 +252,7 @@ export default function Notes() {
                   <SelectValue placeholder="Select site to analyze" />
                 </SelectTrigger>
                 <SelectContent>
-                  {mockSites.map((site) => (
+                  {sites.map((site) => (
                     <SelectItem key={site.id} value={site.id}>
                       {site.domain}
                     </SelectItem>
@@ -290,7 +292,7 @@ export default function Notes() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Sites</SelectItem>
-              {mockSites.map((site) => (
+              {sites.map((site) => (
                 <SelectItem key={site.id} value={site.id}>
                   {site.domain}
                 </SelectItem>
@@ -444,7 +446,7 @@ export default function Notes() {
                         <SelectValue placeholder="Select site" />
                       </SelectTrigger>
                       <SelectContent>
-                        {mockSites.map((site) => (
+                        {sites.map((site) => (
                           <SelectItem key={site.id} value={site.id}>
                             {site.domain}
                           </SelectItem>

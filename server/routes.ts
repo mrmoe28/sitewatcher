@@ -32,6 +32,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/sites/:id", async (req, res) => {
+    try {
+      const site = await storage.getSiteById(req.params.id);
+      if (!site) {
+        return res.status(404).json({ message: "Site not found" });
+      }
+      res.json(site);
+    } catch (error) {
+      console.error("Error fetching site:", error);
+      res.status(500).json({ message: "Failed to fetch site" });
+    }
+  });
+
+  app.put("/api/sites/:id", async (req, res) => {
+    try {
+      const siteData = insertSiteSchema.partial().parse(req.body);
+      const site = await storage.updateSite(req.params.id, siteData);
+      if (!site) {
+        return res.status(404).json({ message: "Site not found" });
+      }
+      res.json(site);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: "Invalid site data", errors: error.errors });
+      } else {
+        console.error("Error updating site:", error);
+        res.status(500).json({ message: "Failed to update site" });
+      }
+    }
+  });
+
+  app.delete("/api/sites/:id", async (req, res) => {
+    try {
+      await storage.deleteSite(req.params.id);
+      res.json({ message: "Site deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting site:", error);
+      res.status(500).json({ message: "Failed to delete site" });
+    }
+  });
+
   // Analysis endpoints
   app.get("/api/analyses", async (req, res) => {
     try {
@@ -136,6 +177,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching dashboard metrics:", error);
       res.status(500).json({ message: "Failed to fetch dashboard metrics" });
+    }
+  });
+
+  // Analytics endpoints
+  app.get("/api/analytics", async (req, res) => {
+    try {
+      const { site, timeRange = "30d" } = req.query;
+      const analytics = await storage.getAnalyticsData(site as string, timeRange as string);
+      res.json(analytics);
+    } catch (error) {
+      console.error("Error fetching analytics:", error);
+      res.status(500).json({ message: "Failed to fetch analytics" });
+    }
+  });
+
+  app.get("/api/analytics/trends", async (req, res) => {
+    try {
+      const { site, timeRange = "30d" } = req.query;
+      const trends = await storage.getAnalyticsTrends(site as string, timeRange as string);
+      res.json(trends);
+    } catch (error) {
+      console.error("Error fetching analytics trends:", error);
+      res.status(500).json({ message: "Failed to fetch analytics trends" });
+    }
+  });
+
+  app.get("/api/analytics/comparison", async (req, res) => {
+    try {
+      const comparison = await storage.getSiteComparison();
+      res.json(comparison);
+    } catch (error) {
+      console.error("Error fetching site comparison:", error);
+      res.status(500).json({ message: "Failed to fetch site comparison" });
     }
   });
 

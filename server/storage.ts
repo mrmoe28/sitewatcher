@@ -16,7 +16,7 @@ import {
   type InsertKeyword
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, count, avg } from "drizzle-orm";
+import { eq, desc, count, avg, gte, and, sql } from "drizzle-orm";
 
 interface IStorage {
   // User methods
@@ -26,8 +26,11 @@ interface IStorage {
   
   // Site methods
   getAllSites(): Promise<Site[]>;
+  getSiteById(id: string): Promise<Site | undefined>;
   getSiteByUrl(url: string): Promise<Site | undefined>;
   createSite(insertSite: InsertSite): Promise<Site>;
+  updateSite(id: string, updates: Partial<InsertSite>): Promise<Site | undefined>;
+  deleteSite(id: string): Promise<void>;
   
   // Analysis methods
   getAllAnalyses(): Promise<Analysis[]>;
@@ -46,6 +49,11 @@ interface IStorage {
   
   // Dashboard metrics
   getDashboardMetrics(): Promise<any>;
+  
+  // Analytics methods
+  getAnalyticsData(siteId?: string, timeRange?: string): Promise<any>;
+  getAnalyticsTrends(siteId?: string, timeRange?: string): Promise<any>;
+  getSiteComparison(): Promise<any>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -78,12 +86,34 @@ export class DatabaseStorage implements IStorage {
     return site || undefined;
   }
 
+  async getSiteById(id: string): Promise<Site | undefined> {
+    const [site] = await db.select().from(sites).where(eq(sites.id, id));
+    return site || undefined;
+  }
+
   async createSite(insertSite: InsertSite): Promise<Site> {
     const [site] = await db
       .insert(sites)
       .values(insertSite)
       .returning();
     return site;
+  }
+
+  async updateSite(id: string, updates: Partial<InsertSite>): Promise<Site | undefined> {
+    const [site] = await db
+      .update(sites)
+      .set(updates)
+      .where(eq(sites.id, id))
+      .returning();
+    return site || undefined;
+  }
+
+  async deleteSite(id: string): Promise<void> {
+    // Delete related data first
+    await db.delete(analyses).where(eq(analyses.siteId, id));
+    await db.delete(keywords).where(eq(keywords.siteId, id));
+    // Delete the site
+    await db.delete(sites).where(eq(sites.id, id));
   }
 
   // Analysis methods
@@ -173,6 +203,152 @@ export class DatabaseStorage implements IStorage {
       sites: siteCount?.count || 0,
       analyses: analysisCount?.count || 0,
     };
+  }
+
+  // Analytics methods
+  async getAnalyticsData(siteId?: string, timeRange?: string): Promise<any> {
+    // Calculate date range
+    const now = new Date();
+    const daysBack = this.getTimeRangeDays(timeRange || "30d");
+    const startDate = new Date(now.getTime() - (daysBack * 24 * 60 * 60 * 1000));
+
+    // Base query filters
+    let whereConditions = [
+      eq(analyses.status, "completed"),
+      gte(analyses.createdAt, startDate)
+    ];
+
+    if (siteId && siteId !== "all") {
+      whereConditions.push(eq(analyses.siteId, siteId));
+    }
+
+    // Get sites count
+    const [totalSites] = await db.select({ count: count() }).from(sites);
+    
+    // Get completed analyses with averages
+    const [metrics] = await db.select({
+      avgSeoScore: avg(analyses.seoScore),
+      avgPageSpeed: avg(analyses.pageSpeed),
+      totalIssues: sql<number>`sum(${analyses.issues})`,
+      count: count()
+    }).from(analyses).where(and(...whereConditions));
+
+    // Calculate trends (compare with previous period)
+    const previousPeriodStart = new Date(startDate.getTime() - (daysBack * 24 * 60 * 60 * 1000));
+    const previousConditions = [
+      eq(analyses.status, "completed"),
+      gte(analyses.createdAt, previousPeriodStart),
+      gte(analyses.createdAt, startDate)
+    ];
+
+    if (siteId && siteId !== "all") {
+      previousConditions.push(eq(analyses.siteId, siteId));
+    }
+
+    const [previousMetrics] = await db.select({
+      avgSeoScore: avg(analyses.seoScore),
+      avgPageSpeed: avg(analyses.pageSpeed),
+      totalIssues: sql<number>`sum(${analyses.issues})`
+    }).from(analyses).where(and(...previousConditions));
+
+    // Calculate trend percentages
+    const currentSeo = Number(metrics?.avgSeoScore) || 0;
+    const previousSeo = Number(previousMetrics?.avgSeoScore) || currentSeo;
+    const seoTrend = previousSeo > 0 ? ((currentSeo - previousSeo) / previousSeo) * 100 : 0;
+
+    const currentSpeed = Number(metrics?.avgPageSpeed) || 0;
+    const previousSpeed = Number(previousMetrics?.avgPageSpeed) || currentSpeed;
+    const speedTrend = previousSpeed > 0 ? ((currentSpeed - previousSpeed) / previousSpeed) * 100 : 0;
+
+    const currentIssues = Number(metrics?.totalIssues) || 0;
+    const previousIssues = Number(previousMetrics?.totalIssues) || currentIssues;
+    const issuesTrend = previousIssues > 0 ? ((currentIssues - previousIssues) / previousIssues) * 100 : 0;
+
+    return {
+      overview: {
+        totalSites: totalSites?.count || 0,
+        avgSeoScore: Math.round(currentSeo),
+        avgPageSpeed: Math.round(currentSpeed),
+        totalIssues: currentIssues,
+        trends: {
+          seoScore: Math.round(seoTrend * 10) / 10,
+          pageSpeed: Math.round(speedTrend * 10) / 10,
+          issues: Math.round(issuesTrend * 10) / 10
+        }
+      }
+    };
+  }
+
+  async getAnalyticsTrends(siteId?: string, timeRange?: string): Promise<any> {
+    const daysBack = this.getTimeRangeDays(timeRange || "30d");
+    const now = new Date();
+    const startDate = new Date(now.getTime() - (daysBack * 24 * 60 * 60 * 1000));
+
+    let whereConditions = [
+      eq(analyses.status, "completed"),
+      gte(analyses.createdAt, startDate)
+    ];
+
+    if (siteId && siteId !== "all") {
+      whereConditions.push(eq(analyses.siteId, siteId));
+    }
+
+    // Get analyses grouped by date
+    const results = await db.select({
+      date: sql<string>`DATE(${analyses.createdAt})`,
+      avgSeoScore: avg(analyses.seoScore),
+      avgPageSpeed: avg(analyses.pageSpeed),
+      totalIssues: sql<number>`sum(${analyses.issues})`
+    })
+    .from(analyses)
+    .where(and(...whereConditions))
+    .groupBy(sql`DATE(${analyses.createdAt})`)
+    .orderBy(sql`DATE(${analyses.createdAt})`);
+
+    return results.map(row => ({
+      date: row.date,
+      seoScore: Math.round(Number(row.avgSeoScore) || 0),
+      pageSpeed: Math.round(Number(row.avgPageSpeed) || 0),
+      issues: Number(row.totalIssues) || 0
+    }));
+  }
+
+  async getSiteComparison(): Promise<any> {
+    // Get latest analysis for each site
+    const latestAnalyses = await db.query.analyses.findMany({
+      with: {
+        site: true
+      },
+      where: eq(analyses.status, "completed"),
+      orderBy: desc(analyses.createdAt)
+    });
+
+    // Group by site and get the most recent analysis for each
+    const siteMap = new Map();
+    latestAnalyses.forEach(analysis => {
+      if (!siteMap.has(analysis.siteId) || 
+          new Date(analysis.createdAt) > new Date(siteMap.get(analysis.siteId).createdAt)) {
+        siteMap.set(analysis.siteId, analysis);
+      }
+    });
+
+    return Array.from(siteMap.values()).map(analysis => ({
+      site: analysis.site.domain,
+      seoScore: analysis.seoScore || 0,
+      pageSpeed: analysis.pageSpeed || 0,
+      issues: analysis.issues || 0,
+      url: analysis.site.url
+    }));
+  }
+
+  private getTimeRangeDays(timeRange: string): number {
+    switch (timeRange) {
+      case "7d": return 7;
+      case "30d": return 30;
+      case "90d": return 90;
+      case "1y": return 365;
+      default: return 30;
+    }
   }
 }
 

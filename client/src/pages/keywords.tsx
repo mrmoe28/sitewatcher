@@ -4,11 +4,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MultiProgress } from "@/components/ui/multi-progress";
 import { KeywordsTableSkeleton } from "@/components/ui/skeleton-loaders";
 import { useProgress, OPERATION_TEMPLATES } from "@/hooks/use-progress";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery } from "@tanstack/react-query";
 import { KeywordTrendChart } from "@/components/charts/keyword-trend-chart";
 import { 
   Key, 
@@ -108,9 +110,16 @@ const mockKeywordInfo = [
 
 export default function Keywords() {
   const [newKeyword, setNewKeyword] = useState("");
+  const [selectedSite, setSelectedSite] = useState("all");
   const [isAdding, setIsAdding] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const { toast } = useToast();
+
+  // Fetch real sites from API
+  const { data: sites = [] } = useQuery({
+    queryKey: ["/api/sites"],
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
 
   const {
     createOperation,
@@ -186,6 +195,14 @@ export default function Keywords() {
     return { trend: "same", change: 0 };
   };
 
+  // Filter keywords based on selected site
+  const filteredKeywords = selectedSite === "all" 
+    ? mockKeywords 
+    : mockKeywords.filter(keyword => {
+        const site = sites.find(s => s.id === selectedSite);
+        return site ? keyword.site === site.domain : false;
+      });
+
   return (
     <PageLayout 
       title="Keyword Tracking" 
@@ -235,6 +252,23 @@ export default function Keywords() {
           </CardContent>
         </Card>
 
+        {/* Site Filter */}
+        <div className="flex flex-col sm:flex-row gap-4">
+          <Select value={selectedSite} onValueChange={setSelectedSite}>
+            <SelectTrigger className="w-full sm:w-64">
+              <SelectValue placeholder="Filter by site" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Sites</SelectItem>
+              {sites.map((site) => (
+                <SelectItem key={site.id} value={site.id}>
+                  {site.domain}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
         {/* Keyword Stats Overview */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -261,7 +295,7 @@ export default function Keywords() {
                     Total Keywords
                   </p>
                   <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {mockKeywords.length}
+                    {filteredKeywords.length}
                   </p>
                 </div>
                 <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
@@ -279,7 +313,7 @@ export default function Keywords() {
                     Avg Position
                   </p>
                   <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {Math.round(mockKeywords.reduce((sum, k) => sum + k.rank, 0) / mockKeywords.length)}
+                    {filteredKeywords.length > 0 ? Math.round(filteredKeywords.reduce((sum, k) => sum + k.rank, 0) / filteredKeywords.length) : 0}
                   </p>
                 </div>
                 <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
@@ -297,7 +331,7 @@ export default function Keywords() {
                     Total Volume
                   </p>
                   <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {mockKeywords.reduce((sum, k) => sum + k.volume, 0).toLocaleString()}
+                    {filteredKeywords.reduce((sum, k) => sum + k.volume, 0).toLocaleString()}
                   </p>
                 </div>
                 <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
@@ -355,7 +389,7 @@ export default function Keywords() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {mockKeywords.map((keyword) => {
+                {filteredKeywords.map((keyword) => {
                   const rankTrend = getRankTrend(keyword.rank, keyword.previousRank);
                   
                   return (

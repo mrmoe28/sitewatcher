@@ -7,14 +7,73 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { WebCrawler } from "@/components/crawler/web-crawler";
 import { useToast } from "@/hooks/use-toast";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { Plus, Globe, Search, TrendingUp } from "lucide-react";
 
 export default function AddSite() {
   const [url, setUrl] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const [showCrawler, setShowCrawler] = useState(false);
   const [autoAnalyze, setAutoAnalyze] = useState(true);
+  const [analysisId, setAnalysisId] = useState<string | null>(null);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  // Site creation mutation
+  const createSiteMutation = useMutation({
+    mutationFn: async (url: string) => {
+      const urlObj = new URL(url);
+      const response = await apiRequest("POST", "/api/sites", {
+        url,
+        domain: urlObj.hostname
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Site Added Successfully", 
+        description: `${data.domain} has been added to your monitoring list`,
+      });
+      // Invalidate site-related queries to refresh data
+      queryClient.invalidateQueries({ queryKey: ["/api/sites"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/metrics"] });
+      
+      if (autoAnalyze) {
+        // Start SEO analysis
+        analyzeUrlMutation.mutate(url);
+      } else {
+        setUrl("");
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to add site. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // SEO analysis mutation
+  const analyzeUrlMutation = useMutation({
+    mutationFn: async (url: string) => {
+      const response = await apiRequest("POST", "/api/analyses", { url });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setAnalysisId(data.id);
+      setShowCrawler(true);
+      // Invalidate analysis queries
+      queryClient.invalidateQueries({ queryKey: ["/api/analyses"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Analysis Failed",
+        description: error instanceof Error ? error.message : "Failed to start analysis",
+        variant: "destructive",
+      });
+    },
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,41 +89,17 @@ export default function AddSite() {
     // Validate URL format
     try {
       new URL(url);
+      createSiteMutation.mutate(url);
     } catch {
       toast({
         title: "Error",
         description: "Please enter a valid URL (e.g., https://example.com)",
         variant: "destructive",
       });
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      // Here we would call the API to add the site
-      // For now, just simulate the process
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      toast({
-        title: "Site Added Successfully",
-        description: `${url} has been added to your monitoring list`,
-      });
-      
-      if (autoAnalyze) {
-        setShowCrawler(true);
-      } else {
-        setUrl("");
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to add site. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
     }
   };
+
+  const isLoading = createSiteMutation.isPending || analyzeUrlMutation.isPending;
 
   const features = [
     {
@@ -182,13 +217,16 @@ export default function AddSite() {
             <CardContent>
               <WebCrawler 
                 url={url} 
+                analysisId={analysisId}
                 onComplete={(result) => {
                   console.log("Analysis complete:", result);
-                  // Here we would save the analysis results to the database
                   toast({
-                    title: "Analysis Saved",
-                    description: "Website analysis has been saved to your notes.",
+                    title: "Analysis Complete",
+                    description: "Website analysis has been completed and saved.",
                   });
+                  setUrl("");
+                  setShowCrawler(false);
+                  setAnalysisId(null);
                 }}
               />
             </CardContent>

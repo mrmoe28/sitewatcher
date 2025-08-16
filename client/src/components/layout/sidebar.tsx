@@ -7,13 +7,15 @@ import {
   History, 
   Settings,
   Gauge,
-  FileText
+  FileText,
+  Globe
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navigationItems = [
   { name: "Dashboard", href: "/", icon: Gauge },
   { name: "Add Site", href: "/add-site", icon: Plus },
+  { name: "Sites", href: "/sites", icon: Globe },
   { name: "Analytics", href: "/analytics", icon: TrendingUp },
   { name: "Keywords", href: "/keywords", icon: Key },
   { name: "Notes", href: "/notes", icon: FileText },

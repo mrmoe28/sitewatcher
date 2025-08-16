@@ -24,12 +24,6 @@ import {
   RefreshCw
 } from "lucide-react";
 
-// Mock data for demonstration
-const mockSites = [
-  { id: "1", domain: "example.com", url: "https://example.com" },
-  { id: "2", domain: "demo.com", url: "https://demo.com" },
-  { id: "3", domain: "test.org", url: "https://test.org" }
-];
 
 const mockAnalyticsData = {
   overview: {
@@ -81,6 +75,12 @@ export default function Analytics() {
     getOperation,
     getActiveOperations
   } = useProgress();
+
+  // Fetch real sites from API
+  const { data: sites = [] } = useQuery({
+    queryKey: ["/api/sites"],
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
 
   const { data: analyticsData, isLoading, refetch } = useQuery({
     queryKey: ["/api/analytics", selectedSite, timeRange],
@@ -250,7 +250,7 @@ export default function Analytics() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Sites</SelectItem>
-              {mockSites.map((site) => (
+              {sites.map((site) => (
                 <SelectItem key={site.id} value={site.id}>
                   {site.domain}
                 </SelectItem>
