@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { HistoryTimelineChart } from "@/components/charts/history-timeline-chart";
 import { 
   History as HistoryIcon, 
   Search, 
@@ -251,6 +252,25 @@ export default function History() {
             </CardContent>
           </Card>
         </div>
+
+        {/* History Timeline Visualization */}
+        <HistoryTimelineChart
+          data={mockAnalysisHistory}
+          onExport={() => {
+            // Create CSV download for timeline data
+            const csvData = mockAnalysisHistory.map(analysis => 
+              `${analysis.date},${analysis.time},${analysis.domain},${analysis.url},${analysis.status},${analysis.seoScore},${analysis.pageSpeed},${analysis.issues}`
+            ).join('\n');
+            const link = document.createElement('a');
+            link.href = `data:text/csv;charset=utf-8,Date,Time,Domain,URL,Status,SEO Score,Page Speed,Issues\n${csvData}`;
+            link.download = `analysis-history-${new Date().toISOString().split('T')[0]}.csv`;
+            link.click();
+          }}
+          onAnalysisClick={(analysis) => {
+            // Navigate to analysis details or show modal
+            console.log('Show analysis details:', analysis);
+          }}
+        />
 
         {/* Analysis History Table */}
         <Card>

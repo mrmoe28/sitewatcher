@@ -9,6 +9,7 @@ import { MultiProgress } from "@/components/ui/multi-progress";
 import { KeywordsTableSkeleton } from "@/components/ui/skeleton-loaders";
 import { useProgress, OPERATION_TEMPLATES } from "@/hooks/use-progress";
 import { useToast } from "@/hooks/use-toast";
+import { KeywordTrendChart } from "@/components/charts/keyword-trend-chart";
 import { 
   Key, 
   Plus, 
@@ -57,6 +58,51 @@ const mockKeywords = [
     volume: 890,
     difficulty: "medium",
     site: "test.org"
+  }
+];
+
+// Mock trend data for keyword rankings over time
+const mockKeywordTrendData = [
+  { date: "2024-01-01", "SEO analysis": 8, "website optimization": 18, "page speed test": 5, "meta tags optimization": 15 },
+  { date: "2024-01-08", "SEO analysis": 7, "website optimization": 16, "page speed test": 4, "meta tags optimization": 14 },
+  { date: "2024-01-15", "SEO analysis": 6, "website optimization": 14, "page speed test": 3, "meta tags optimization": 13 },
+  { date: "2024-01-22", "SEO analysis": 5, "website optimization": 13, "page speed test": 3, "meta tags optimization": 16 },
+  { date: "2024-01-29", "SEO analysis": 5, "website optimization": 12, "page speed test": 3, "meta tags optimization": 18 }
+];
+
+// Mock keyword info for chart component
+const mockKeywordInfo = [
+  {
+    keyword: "SEO analysis",
+    currentRank: 5,
+    previousRank: 8,
+    change: 3,
+    searchVolume: 2900,
+    difficulty: 65
+  },
+  {
+    keyword: "website optimization", 
+    currentRank: 12,
+    previousRank: 15,
+    change: 3,
+    searchVolume: 1800,
+    difficulty: 78
+  },
+  {
+    keyword: "page speed test",
+    currentRank: 3,
+    previousRank: 3,
+    change: 0,
+    searchVolume: 5400,
+    difficulty: 45
+  },
+  {
+    keyword: "meta tags optimization",
+    currentRank: 18,
+    previousRank: 12,
+    change: -6,
+    searchVolume: 890,
+    difficulty: 58
   }
 ];
 
@@ -262,6 +308,28 @@ export default function Keywords() {
           </Card>
           </div>
         </div>
+
+        {/* Keyword Trends Chart */}
+        <KeywordTrendChart
+          data={mockKeywordTrendData}
+          keywords={mockKeywordInfo}
+          onExport={() => {
+            // Create CSV download for keyword trend data
+            const csvData = mockKeywordTrendData.map(point => {
+              const row = [point.date];
+              mockKeywordInfo.forEach(keyword => {
+                row.push(point[keyword.keyword] || '');
+              });
+              return row.join(',');
+            }).join('\n');
+            
+            const headers = ['Date', ...mockKeywordInfo.map(k => k.keyword)].join(',');
+            const link = document.createElement('a');
+            link.href = `data:text/csv;charset=utf-8,${headers}\n${csvData}`;
+            link.download = `keyword-trends-${new Date().toISOString().split('T')[0]}.csv`;
+            link.click();
+          }}
+        />
 
         {/* Keywords Table */}
         <Card>

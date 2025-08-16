@@ -9,6 +9,9 @@ import { MultiProgress } from "@/components/ui/multi-progress";
 import { AnalyticsOverviewSkeleton, ChartSkeleton } from "@/components/ui/skeleton-loaders";
 import { useProgress, OPERATION_TEMPLATES } from "@/hooks/use-progress";
 import { useQuery } from "@tanstack/react-query";
+import { PerformanceLineChart } from "@/components/charts/performance-line-chart";
+import { SiteComparisonChart } from "@/components/charts/site-comparison-chart";
+import { MiniSparkline } from "@/components/charts/mini-sparkline";
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -38,6 +41,17 @@ const mockAnalyticsData = {
       seoScore: 5.2,
       pageSpeed: -2.1,
       issues: -8
+    },
+    sparklines: {
+      seoScore: [
+        { value: 72 }, { value: 75 }, { value: 78 }, { value: 80 }, { value: 78 }
+      ],
+      pageSpeed: [
+        { value: 88 }, { value: 86 }, { value: 85 }, { value: 87 }, { value: 85 }
+      ],
+      issues: [
+        { value: 15 }, { value: 13 }, { value: 12 }, { value: 10 }, { value: 12 }
+      ]
     }
   },
   timeSeriesData: [
@@ -142,17 +156,19 @@ export default function Analytics() {
     value, 
     trend, 
     icon: Icon, 
-    suffix = "" 
+    suffix = "",
+    sparklineData
   }: {
     title: string;
     value: number;
     trend?: number;
     icon: any;
     suffix?: string;
+    sparklineData?: Array<{ value: number }>;
   }) => (
     <Card>
       <CardContent className="p-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-4">
           <div>
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
               {title}
@@ -177,6 +193,15 @@ export default function Analytics() {
             <Icon className="h-6 w-6 text-primary" />
           </div>
         </div>
+        {sparklineData && (
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Last 5 periods</span>
+            <MiniSparkline 
+              data={sparklineData}
+              color={trend && trend > 0 ? "hsl(142, 76%, 36%)" : trend && trend < 0 ? "hsl(0, 84%, 60%)" : "hsl(var(--primary))"}
+            />
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -278,6 +303,7 @@ export default function Analytics() {
             value={analyticsData?.overview.avgSeoScore || 0}
             trend={analyticsData?.overview.trends.seoScore}
             icon={TrendingUp}
+            sparklineData={analyticsData?.overview.sparklines.seoScore}
           />
           <MetricCard
             title="Avg Page Speed"
@@ -285,12 +311,14 @@ export default function Analytics() {
             trend={analyticsData?.overview.trends.pageSpeed}
             icon={BarChart3}
             suffix="/100"
+            sparklineData={analyticsData?.overview.sparklines.pageSpeed}
           />
           <MetricCard
             title="Total Issues"
             value={analyticsData?.overview.totalIssues || 0}
             trend={analyticsData?.overview.trends.issues}
             icon={LineChart}
+            sparklineData={analyticsData?.overview.sparklines.issues}
           />
         </div>
 
@@ -303,73 +331,41 @@ export default function Analytics() {
           </TabsList>
 
           <TabsContent value="trends" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <LineChart className="h-5 w-5" />
-                  Performance Over Time
-                </CardTitle>
-                <CardDescription>
-                  Track your SEO performance, page speed, and issues over time
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {/* This would contain a proper chart component */}
-                <div className="h-64 bg-gray-50 dark:bg-gray-800 rounded-lg flex items-center justify-center">
-                  <p className="text-gray-500 dark:text-gray-400">
-                    Chart component would go here (requires chart library)
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+            <PerformanceLineChart
+              data={analyticsData?.timeSeriesData || []}
+              timeRange={timeRange}
+              onTimeRangeChange={setTimeRange}
+              onExport={() => {
+                // Create CSV download for performance data
+                const csvData = analyticsData?.timeSeriesData.map(point => 
+                  `${point.date},${point.seoScore},${point.pageSpeed},${point.issues}`
+                ).join('\n');
+                const link = document.createElement('a');
+                link.href = `data:text/csv;charset=utf-8,Date,SEO Score,Page Speed,Issues\n${csvData}`;
+                link.download = `performance-trends-${new Date().toISOString().split('T')[0]}.csv`;
+                link.click();
+              }}
+            />
           </TabsContent>
 
           <TabsContent value="comparison" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <BarChart3 className="h-5 w-5" />
-                  Site Performance Comparison
-                </CardTitle>
-                <CardDescription>
-                  Compare performance metrics across all your monitored sites
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {analyticsData?.siteComparison.map((site, index) => (
-                    <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
-                          <Globe className="h-4 w-4 text-primary" />
-                        </div>
-                        <span className="font-medium">{site.site}</span>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <div className="text-center">
-                          <p className="text-sm text-gray-500">SEO Score</p>
-                          <Badge variant={site.seoScore >= 80 ? "default" : site.seoScore >= 60 ? "secondary" : "destructive"}>
-                            {site.seoScore}
-                          </Badge>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-sm text-gray-500">Page Speed</p>
-                          <Badge variant={site.pageSpeed >= 90 ? "default" : site.pageSpeed >= 70 ? "secondary" : "destructive"}>
-                            {site.pageSpeed}
-                          </Badge>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-sm text-gray-500">Issues</p>
-                          <Badge variant={site.issues <= 3 ? "default" : site.issues <= 7 ? "secondary" : "destructive"}>
-                            {site.issues}
-                          </Badge>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+            <SiteComparisonChart
+              data={analyticsData?.siteComparison || []}
+              onExport={() => {
+                // Create CSV download for comparison data
+                const csvData = analyticsData?.siteComparison.map(site => 
+                  `${site.site},${site.seoScore},${site.pageSpeed},${site.issues}`
+                ).join('\n');
+                const link = document.createElement('a');
+                link.href = `data:text/csv;charset=utf-8,Site,SEO Score,Page Speed,Issues\n${csvData}`;
+                link.download = `site-comparison-${new Date().toISOString().split('T')[0]}.csv`;
+                link.click();
+              }}
+              onSiteClick={(site) => {
+                // Navigate to individual site analytics page
+                console.log('Navigate to site details:', site);
+              }}
+            />
           </TabsContent>
 
           <TabsContent value="insights" className="space-y-6">
