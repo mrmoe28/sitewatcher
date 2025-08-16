@@ -41,9 +41,10 @@ export default function AddSite() {
       if (autoAnalyze) {
         // Start SEO analysis
         analyzeUrlMutation.mutate(url);
-      } else {
-        setUrl("");
       }
+      
+      // Always clear the URL after successful site creation
+      setUrl("");
     },
     onError: (error) => {
       toast({
