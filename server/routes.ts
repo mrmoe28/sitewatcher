@@ -139,6 +139,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/analyses/:id", async (req, res) => {
     try {
+      const analysis = await storage.getAnalysisById(req.params.id);
+      if (!analysis) {
+        return res.status(404).json({ message: "Analysis not found" });
+      }
+      
       await storage.deleteAnalysis(req.params.id);
       res.json({ message: "Analysis deleted successfully" });
     } catch (error) {

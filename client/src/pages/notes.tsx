@@ -7,10 +7,22 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { MultiProgress } from "@/components/ui/multi-progress";
 import { useProgress } from "@/hooks/use-progress";
 import { useToast } from "@/hooks/use-toast";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { 
   FileText, 
   Globe, 
@@ -27,67 +39,35 @@ import {
   Clock,
   Server,
   Smartphone,
-  Zap
+  Zap,
+  Trash2
 } from "lucide-react";
 
-// Component moved inside to access hooks
-
-const mockNotes = [
-  {
-    id: "1",
-    siteId: "1",
-    siteDomain: "example.com",
-    title: "Tech Stack Analysis",
-    category: "tech-stack",
-    content: "React 18 with Next.js 14, hosted on Vercel. Uses Tailwind CSS for styling and TypeScript for type safety.",
-    tags: ["React", "Next.js", "Vercel", "TypeScript"],
-    lastUpdated: "2024-01-29T10:30:00Z",
-    automated: true,
-    techStack: {
-      framework: "Next.js 14",
-      library: "React 18",
-      styling: "Tailwind CSS",
-      language: "TypeScript",
-      hosting: "Vercel",
-      cdn: "Vercel CDN",
-      analytics: "Google Analytics 4"
-    }
-  },
-  {
-    id: "2",
-    siteId: "2",
-    siteDomain: "demo.com",
-    title: "Performance Optimization Notes",
-    category: "performance",
-    content: "Site loads in 2.3s on desktop, 3.8s on mobile. Images are not optimized. Suggest implementing lazy loading and WebP format.",
-    tags: ["Performance", "Images", "Loading"],
-    lastUpdated: "2024-01-28T15:45:00Z",
-    automated: false,
-    techStack: {
-      framework: "WordPress",
-      cms: "WordPress 6.4",
-      hosting: "HostGator",
-      plugins: ["Yoast SEO", "WP Rocket", "Elementor"]
-    }
-  },
-  {
-    id: "3",
-    siteId: "3",
-    siteDomain: "test.org",
-    title: "Security Assessment",
-    category: "security",
-    content: "HTTPS enabled with valid SSL certificate. Content Security Policy headers present. No obvious security vulnerabilities detected.",
-    tags: ["HTTPS", "SSL", "CSP", "Security"],
-    lastUpdated: "2024-01-27T09:15:00Z",
-    automated: true,
-    techStack: {
-      framework: "Vue.js 3",
-      buildTool: "Vite",
-      hosting: "Netlify",
-      ssl: "Let's Encrypt"
-    }
-  }
-];
+interface Analysis {
+  id: string;
+  siteId: string;
+  seoScore: number | null;
+  pageSpeed: number | null;
+  issues: number;
+  status: string;
+  progress: number;
+  statusMessage: string;
+  rawData: any;
+  createdAt: string;
+  site?: {
+    id: string;
+    url: string;
+    domain: string;
+    createdAt: string;
+  };
+  recommendations?: Array<{
+    id: string;
+    title: string;
+    description: string;
+    priority: string;
+    type: string;
+  }>;
+}
 
 export default function Notes() {
   const [selectedSite, setSelectedSite] = useState("all");
@@ -98,6 +78,7 @@ export default function Notes() {
   const [editingNote, setEditingNote] = useState<string | null>(null);
 
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const {
     createOperation,
     startOperation,
@@ -111,19 +92,72 @@ export default function Notes() {
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
-  const activeOperations = getActiveOperations();
-  const crawlerOperation = activeOperations.find(op => op.type === "site-comparison"); // Using existing type for demo
+  // Fetch real analyses from API
+  const { data: analyses = [], isLoading: analysesLoading } = useQuery({
+    queryKey: ["/api/analyses"],
+    staleTime: 2 * 60 * 1000, // 2 minutes
+  });
 
-  const filteredNotes = mockNotes.filter(note => {
-    const matchesSite = selectedSite === "all" || note.siteId === selectedSite;
-    const matchesCategory = selectedCategory === "all" || note.category === selectedCategory;
+  // Create a map of sites for easy lookup
+  const sitesMap = sites.reduce((acc: Record<string, any>, site: any) => {
+    acc[site.id] = site;
+    return acc;
+  }, {});
+
+  // Transform analyses into note-like format
+  const transformedAnalyses: Analysis[] = analyses.map((analysis: any) => ({
+    ...analysis,
+    site: sitesMap[analysis.siteId],
+  }));
+
+  // Delete analysis mutation
+  const deleteAnalysisMutation = useMutation({
+    mutationFn: async (analysisId: string) => {
+      const response = await apiRequest("DELETE", `/api/analyses/${analysisId}`);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Analysis Deleted",
+        description: "The analysis has been successfully deleted.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/analyses"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete analysis",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const activeOperations = getActiveOperations();
+  const crawlerOperation = activeOperations.find(op => op.type === "site-comparison");
+
+  const filteredAnalyses = transformedAnalyses.filter(analysis => {
+    const matchesSite = selectedSite === "all" || analysis.siteId === selectedSite;
+    const matchesCategory = selectedCategory === "all" || getAnalysisCategory(analysis) === selectedCategory;
     const matchesSearch = searchTerm === "" || 
-      note.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      note.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      note.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
+      (analysis.site?.domain || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (analysis.statusMessage || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      analysis.status.toLowerCase().includes(searchTerm.toLowerCase());
     
     return matchesSite && matchesCategory && matchesSearch;
   });
+
+  // Helper function to determine analysis category based on status and data
+  function getAnalysisCategory(analysis: Analysis): string {
+    if (analysis.status === 'completed' && analysis.seoScore) {
+      return 'tech-stack';
+    } else if (analysis.status === 'completed' && analysis.pageSpeed) {
+      return 'performance';
+    } else if (analysis.status === 'failed') {
+      return 'security';
+    }
+    return 'general';
+  }
+
 
   const handleAnalyzeSite = async (siteId: string) => {
     const site = sites.find(s => s.id === siteId);
@@ -323,61 +357,104 @@ export default function Notes() {
           </TabsList>
 
           <TabsContent value="notes" className="space-y-6">
-            {/* Notes Grid */}
+            {/* Analysis Loading */}
+            {analysesLoading && (
+              <div className="text-center py-12">
+                <RefreshCw className="h-8 w-8 text-gray-400 mx-auto mb-4 animate-spin" />
+                <p className="text-gray-500">Loading analyses...</p>
+              </div>
+            )}
+
+            {/* Analysis Grid */}
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {filteredNotes.map((note) => (
-                <Card key={note.id} className="hover:shadow-md transition-shadow">
+              {filteredAnalyses.map((analysis) => (
+                <Card key={analysis.id} className="hover:shadow-md transition-shadow">
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between">
                       <div className="space-y-1">
-                        <CardTitle className="text-lg">{note.title}</CardTitle>
+                        <CardTitle className="text-lg">
+                          {analysis.status === 'completed' ? 'SEO Analysis' : 
+                           analysis.status === 'running' ? 'Analysis In Progress' : 
+                           analysis.status === 'failed' ? 'Analysis Failed' : 'Analysis Pending'}
+                        </CardTitle>
                         <div className="flex items-center gap-2 text-sm text-gray-500">
                           <Globe className="h-3 w-3" />
-                          {note.siteDomain}
-                          {note.automated && (
-                            <Badge variant="outline" className="text-xs">
-                              Auto-generated
-                            </Badge>
-                          )}
+                          {analysis.site?.domain || 'Unknown Site'}
+                          <Badge variant="outline" className="text-xs">
+                            Auto-generated
+                          </Badge>
                         </div>
                       </div>
-                      <div className={`p-2 rounded-lg ${getCategoryColor(note.category)}`}>
-                        {getCategoryIcon(note.category)}
+                      <div className={`p-2 rounded-lg ${getCategoryColor(getAnalysisCategory(analysis))}`}>
+                        {getCategoryIcon(getAnalysisCategory(analysis))}
                       </div>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3">
-                      {note.content}
+                      {analysis.statusMessage || `Analysis ${analysis.status} for ${analysis.site?.domain}`}
                     </p>
                     
-                    {/* Tech Stack Info */}
-                    {note.techStack && (
+                    {/* Analysis Metrics */}
+                    {analysis.status === 'completed' && (analysis.seoScore || analysis.pageSpeed) && (
                       <div className="space-y-2">
                         <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                          Tech Stack
+                          Metrics
                         </h4>
                         <div className="grid grid-cols-2 gap-2 text-xs">
-                          {Object.entries(note.techStack).slice(0, 4).map(([key, value]) => (
-                            <div key={key} className="flex justify-between">
-                              <span className="text-gray-500 capitalize">{key}:</span>
-                              <span className="font-medium truncate ml-1">{value}</span>
+                          {analysis.seoScore && (
+                            <div className="flex justify-between">
+                              <span className="text-gray-500">SEO Score:</span>
+                              <span className="font-medium">{analysis.seoScore}/100</span>
                             </div>
-                          ))}
+                          )}
+                          {analysis.pageSpeed && (
+                            <div className="flex justify-between">
+                              <span className="text-gray-500">Page Speed:</span>
+                              <span className="font-medium">{analysis.pageSpeed}/100</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Issues:</span>
+                            <span className="font-medium">{analysis.issues}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Status:</span>
+                            <span className="font-medium capitalize">{analysis.status}</span>
+                          </div>
                         </div>
                       </div>
                     )}
                     
-                    {/* Tags */}
+                    {/* Progress for running analyses */}
+                    {analysis.status === 'running' && (
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-xs">
+                          <span>Progress</span>
+                          <span>{analysis.progress}%</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className="bg-primary h-2 rounded-full transition-all duration-300" 
+                            style={{ width: `${analysis.progress}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Status Tags */}
                     <div className="flex flex-wrap gap-1">
-                      {note.tags.slice(0, 3).map((tag, index) => (
-                        <Badge key={index} variant="secondary" className="text-xs">
-                          {tag}
-                        </Badge>
-                      ))}
-                      {note.tags.length > 3 && (
+                      <Badge variant="secondary" className="text-xs">
+                        {analysis.status}
+                      </Badge>
+                      {analysis.site?.url && (
                         <Badge variant="outline" className="text-xs">
-                          +{note.tags.length - 3} more
+                          Website Analysis
+                        </Badge>
+                      )}
+                      {analysis.seoScore && (
+                        <Badge variant="outline" className="text-xs">
+                          SEO
                         </Badge>
                       )}
                     </div>
@@ -386,7 +463,7 @@ export default function Notes() {
                     <div className="flex items-center justify-between pt-2 border-t">
                       <div className="flex items-center gap-1 text-xs text-gray-500">
                         <Clock className="h-3 w-3" />
-                        {new Date(note.lastUpdated).toLocaleDateString()}
+                        {new Date(analysis.createdAt).toLocaleDateString()}
                       </div>
                       <div className="flex gap-1">
                         <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
@@ -395,6 +472,38 @@ export default function Notes() {
                         <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
                           <Edit className="h-3 w-3" />
                         </Button>
+                        
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-7 w-7 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                              disabled={deleteAnalysisMutation.isPending}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete Analysis</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Are you sure you want to delete this analysis for <strong>{analysis.site?.domain}</strong>? 
+                                This action cannot be undone and will also delete all associated recommendations.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction 
+                                onClick={() => deleteAnalysisMutation.mutate(analysis.id)}
+                                className="bg-red-600 hover:bg-red-700"
+                                disabled={deleteAnalysisMutation.isPending}
+                              >
+                                {deleteAnalysisMutation.isPending ? "Deleting..." : "Delete Analysis"}
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </div>
                     </div>
                   </CardContent>
@@ -402,16 +511,23 @@ export default function Notes() {
               ))}
             </div>
 
-            {filteredNotes.length === 0 && (
+            {!analysesLoading && filteredAnalyses.length === 0 && (
               <div className="text-center py-12">
                 <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                  No notes found
+                  No analyses found
                 </h3>
                 <p className="text-gray-500 dark:text-gray-400 mb-4">
-                  No notes match your current filters. Try adjusting your search criteria.
+                  {searchTerm || selectedSite !== 'all' || selectedCategory !== 'all' 
+                    ? 'No analyses match your current filters. Try adjusting your search criteria.'
+                    : 'No website analyses have been created yet. Use the analysis tools above to get started.'
+                  }
                 </p>
-                <Button onClick={() => setSearchTerm("")} variant="outline">
+                <Button onClick={() => {
+                  setSearchTerm("");
+                  setSelectedSite("all");
+                  setSelectedCategory("all");
+                }} variant="outline">
                   Clear Filters
                 </Button>
               </div>

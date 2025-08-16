@@ -1,5 +1,6 @@
 import { Menu, Moon, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ProfileDropdown } from "./profile-dropdown";
 
 export function Header() {
   const toggleTheme = () => {
@@ -45,11 +46,11 @@ export function Header() {
             <Bell className="text-lg" />
           </Button>
           
-          <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-            <span className="text-white text-sm font-medium" data-testid="user-avatar">
-              JD
-            </span>
-          </div>
+          <ProfileDropdown 
+            userInitials="JD"
+            userName="John Doe" 
+            userEmail="john@sitewatcher.com"
+          />
         </div>
       </div>
     </header>
