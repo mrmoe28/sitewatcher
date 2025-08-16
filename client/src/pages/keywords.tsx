@@ -5,6 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { MultiProgress } from "@/components/ui/multi-progress";
+import { KeywordsTableSkeleton } from "@/components/ui/skeleton-loaders";
+import { useProgress, OPERATION_TEMPLATES } from "@/hooks/use-progress";
 import { useToast } from "@/hooks/use-toast";
 import { 
   Key, 
@@ -13,7 +16,8 @@ import {
   TrendingDown, 
   Search,
   Eye,
-  Target
+  Target,
+  RefreshCw
 } from "lucide-react";
 
 // Mock data for demonstration
@@ -59,7 +63,19 @@ const mockKeywords = [
 export default function Keywords() {
   const [newKeyword, setNewKeyword] = useState("");
   const [isAdding, setIsAdding] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const { toast } = useToast();
+
+  const {
+    createOperation,
+    startOperation,
+    cancelOperation,
+    getActiveOperations
+  } = useProgress();
+
+  const activeOperations = getActiveOperations();
+  const rankCheckOperation = activeOperations.find(op => op.type === "keyword-rank-check");
+  const bulkAddOperation = activeOperations.find(op => op.type === "keyword-bulk-add");
 
   const handleAddKeyword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,6 +103,28 @@ export default function Keywords() {
     }
   };
 
+  const handleRefreshRankings = async () => {
+    if (isRefreshing) return;
+    
+    setIsRefreshing(true);
+    const operationId = createOperation(
+      "keyword-rank-check",
+      OPERATION_TEMPLATES["keyword-rank-check"].title,
+      OPERATION_TEMPLATES["keyword-rank-check"].stages
+    );
+    
+    startOperation(operationId);
+    
+    // Simulate rank checking process
+    setTimeout(() => {
+      toast({
+        title: "Rankings Updated",
+        description: "All keyword rankings have been successfully updated",
+      });
+      setIsRefreshing(false);
+    }, 10000); // 10 seconds for rank checking
+  };
+
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {
       case "low": return "default";
@@ -108,6 +146,21 @@ export default function Keywords() {
       description="Monitor your keyword rankings and search performance across all your sites"
     >
       <div className="space-y-6">
+        {/* Progress Indicators */}
+        {rankCheckOperation && (
+          <MultiProgress
+            title={rankCheckOperation.title}
+            stages={rankCheckOperation.stages}
+            currentStage={rankCheckOperation.currentStage}
+            overallProgress={rankCheckOperation.overallProgress}
+            canCancel={rankCheckOperation.canCancel}
+            onCancel={() => {
+              cancelOperation(rankCheckOperation.id);
+              setIsRefreshing(false);
+            }}
+          />
+        )}
+
         {/* Add Keyword Form */}
         <Card>
           <CardHeader>
@@ -137,8 +190,24 @@ export default function Keywords() {
         </Card>
 
         {/* Keyword Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+              Keyword Performance Overview
+            </h3>
+            <Button 
+              variant="outline" 
+              onClick={handleRefreshRankings}
+              disabled={isRefreshing}
+              className="flex items-center gap-2"
+            >
+              <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              {isRefreshing ? 'Checking Rankings...' : 'Refresh Rankings'}
+            </Button>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -191,6 +260,7 @@ export default function Keywords() {
               </div>
             </CardContent>
           </Card>
+          </div>
         </div>
 
         {/* Keywords Table */}

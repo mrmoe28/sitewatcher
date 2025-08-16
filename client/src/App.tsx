@@ -7,6 +7,7 @@ import Dashboard from "@/pages/dashboard";
 import AddSite from "@/pages/add-site";
 import Analytics from "@/pages/analytics";
 import Keywords from "@/pages/keywords";
+import Notes from "@/pages/notes";
 import History from "@/pages/history";
 import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
@@ -18,6 +19,7 @@ function Router() {
       <Route path="/add-site" component={AddSite} />
       <Route path="/analytics" component={Analytics} />
       <Route path="/keywords" component={Keywords} />
+      <Route path="/notes" component={Notes} />
       <Route path="/history" component={History} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />

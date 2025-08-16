@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { PageLayout } from "@/components/layout/page-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { MultiProgress } from "@/components/ui/multi-progress";
+import { AnalyticsOverviewSkeleton, ChartSkeleton } from "@/components/ui/skeleton-loaders";
+import { useProgress, OPERATION_TEMPLATES } from "@/hooks/use-progress";
 import { useQuery } from "@tanstack/react-query";
 import { 
   TrendingUp, 
@@ -14,7 +17,8 @@ import {
   BarChart3,
   LineChart,
   PieChart,
-  Globe
+  Globe,
+  RefreshCw
 } from "lucide-react";
 
 // Mock data for demonstration
@@ -53,11 +57,85 @@ const mockAnalyticsData = {
 export default function Analytics() {
   const [selectedSite, setSelectedSite] = useState("all");
   const [timeRange, setTimeRange] = useState("30d");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  
+  const {
+    createOperation,
+    startOperation,
+    cancelOperation,
+    getOperation,
+    getActiveOperations
+  } = useProgress();
 
-  const { data: analyticsData } = useQuery({
+  const { data: analyticsData, isLoading, refetch } = useQuery({
     queryKey: ["/api/analytics", selectedSite, timeRange],
-    queryFn: () => Promise.resolve(mockAnalyticsData), // Mock API call
+    queryFn: () => {
+      // Simulate API delay for demonstration
+      return new Promise(resolve => {
+        setTimeout(() => resolve(mockAnalyticsData), 1500);
+      });
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
+
+  const activeOperations = getActiveOperations();
+  const refreshOperation = activeOperations.find(op => op.type === "analytics-aggregation");
+  const exportOperation = activeOperations.find(op => op.type === "analytics-export");
+
+  const handleRefreshAnalytics = async () => {
+    if (isRefreshing) return;
+    
+    setIsRefreshing(true);
+    const operationId = createOperation(
+      "analytics-aggregation",
+      OPERATION_TEMPLATES["analytics-aggregation"].title,
+      OPERATION_TEMPLATES["analytics-aggregation"].stages
+    );
+    
+    startOperation(operationId);
+    
+    // Simulate the refresh process
+    setTimeout(() => {
+      refetch();
+      setIsRefreshing(false);
+    }, 8000); // 8 seconds to complete the simulated operation
+  };
+
+  const handleExportReport = async () => {
+    if (isExporting) return;
+    
+    setIsExporting(true);
+    const operationId = createOperation(
+      "analytics-export",
+      OPERATION_TEMPLATES["analytics-export"].title,
+      OPERATION_TEMPLATES["analytics-export"].stages
+    );
+    
+    startOperation(operationId);
+    
+    // Simulate export process
+    setTimeout(() => {
+      // Simulate file download
+      const link = document.createElement('a');
+      link.href = 'data:text/plain;charset=utf-8,Analytics Report Data...';
+      link.download = `analytics-report-${new Date().toISOString().split('T')[0]}.csv`;
+      link.click();
+      setIsExporting(false);
+    }, 6000); // 6 seconds for export
+  };
+
+  // Show loading skeleton while data is being fetched initially
+  if (isLoading && !analyticsData) {
+    return (
+      <PageLayout 
+        title="Analytics Dashboard" 
+        description="Comprehensive SEO analytics and performance insights across all your monitored sites"
+      >
+        <AnalyticsOverviewSkeleton />
+      </PageLayout>
+    );
+  }
 
   const MetricCard = ({ 
     title, 
@@ -109,6 +187,36 @@ export default function Analytics() {
       description="Comprehensive SEO analytics and performance insights across all your monitored sites"
     >
       <div className="space-y-6">
+        {/* Progress Indicators */}
+        {refreshOperation && (
+          <MultiProgress
+            title={refreshOperation.title}
+            stages={refreshOperation.stages}
+            currentStage={refreshOperation.currentStage}
+            overallProgress={refreshOperation.overallProgress}
+            canCancel={refreshOperation.canCancel}
+            onCancel={() => {
+              cancelOperation(refreshOperation.id);
+              setIsRefreshing(false);
+            }}
+          />
+        )}
+
+        {exportOperation && (
+          <MultiProgress
+            title={exportOperation.title}
+            stages={exportOperation.stages}
+            currentStage={exportOperation.currentStage}
+            overallProgress={exportOperation.overallProgress}
+            canCancel={exportOperation.canCancel}
+            onCancel={() => {
+              cancelOperation(exportOperation.id);
+              setIsExporting(false);
+            }}
+            compact
+          />
+        )}
+
         {/* Filters */}
         <div className="flex flex-col sm:flex-row gap-4">
           <Select value={selectedSite} onValueChange={setSelectedSite}>
@@ -137,9 +245,24 @@ export default function Analytics() {
             </SelectContent>
           </Select>
 
-          <Button variant="outline" className="flex items-center gap-2">
+          <Button 
+            variant="outline" 
+            onClick={handleRefreshAnalytics}
+            disabled={isRefreshing}
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            {isRefreshing ? 'Refreshing...' : 'Refresh Data'}
+          </Button>
+
+          <Button 
+            variant="outline" 
+            onClick={handleExportReport}
+            disabled={isExporting}
+            className="flex items-center gap-2"
+          >
             <Download className="h-4 w-4" />
-            Export Report
+            {isExporting ? 'Exporting...' : 'Export Report'}
           </Button>
         </div>
 

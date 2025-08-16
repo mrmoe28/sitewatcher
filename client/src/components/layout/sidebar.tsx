@@ -6,7 +6,8 @@ import {
   Key, 
   History, 
   Settings,
-  Gauge
+  Gauge,
+  FileText
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -15,6 +16,7 @@ const navigationItems = [
   { name: "Add Site", href: "/add-site", icon: Plus },
   { name: "Analytics", href: "/analytics", icon: TrendingUp },
   { name: "Keywords", href: "/keywords", icon: Key },
+  { name: "Notes", href: "/notes", icon: FileText },
   { name: "History", href: "/history", icon: History },
   { name: "Settings", href: "/settings", icon: Settings },
 ];

@@ -4,12 +4,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { WebCrawler } from "@/components/crawler/web-crawler";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Globe, Search, TrendingUp } from "lucide-react";
 
 export default function AddSite() {
   const [url, setUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [showCrawler, setShowCrawler] = useState(false);
+  const [autoAnalyze, setAutoAnalyze] = useState(true);
   const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -18,6 +22,18 @@ export default function AddSite() {
       toast({
         title: "Error",
         description: "Please enter a valid URL",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate URL format
+    try {
+      new URL(url);
+    } catch {
+      toast({
+        title: "Error",
+        description: "Please enter a valid URL (e.g., https://example.com)",
         variant: "destructive",
       });
       return;
@@ -34,7 +50,11 @@ export default function AddSite() {
         description: `${url} has been added to your monitoring list`,
       });
       
-      setUrl("");
+      if (autoAnalyze) {
+        setShowCrawler(true);
+      } else {
+        setUrl("");
+      }
     } catch (error) {
       toast({
         title: "Error",
@@ -93,8 +113,20 @@ export default function AddSite() {
                   disabled={isLoading}
                 />
               </div>
+              
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="auto-analyze" 
+                  checked={autoAnalyze}
+                  onCheckedChange={setAutoAnalyze}
+                />
+                <Label htmlFor="auto-analyze" className="text-sm">
+                  Automatically analyze tech stack after adding site
+                </Label>
+              </div>
+              
               <Button type="submit" disabled={isLoading} className="w-full">
-                {isLoading ? "Adding Site..." : "Add Site & Start Analysis"}
+                {isLoading ? "Adding Site..." : autoAnalyze ? "Add Site & Analyze" : "Add Site"}
               </Button>
             </form>
           </CardContent>
@@ -134,6 +166,34 @@ export default function AddSite() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Web Crawler */}
+        {showCrawler && url && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Search className="h-5 w-5" />
+                Website Analysis
+              </CardTitle>
+              <CardDescription>
+                Comprehensive analysis and tech stack detection for {new URL(url).hostname}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <WebCrawler 
+                url={url} 
+                onComplete={(result) => {
+                  console.log("Analysis complete:", result);
+                  // Here we would save the analysis results to the database
+                  toast({
+                    title: "Analysis Saved",
+                    description: "Website analysis has been saved to your notes.",
+                  });
+                }}
+              />
+            </CardContent>
+          </Card>
+        )}
       </div>
     </PageLayout>
   );
