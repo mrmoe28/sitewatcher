@@ -140,6 +140,9 @@ client/src/
 
 ## Deployment
 
+### Vercel Deployment
+The application is automatically deployed to Vercel on every push to the main branch.
+
 ### Production Build
 ```bash
 npm run build
