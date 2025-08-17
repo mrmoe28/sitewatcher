@@ -6,6 +6,7 @@ dotenv.config();
 
 import express, { type Request, Response, NextFunction } from "express";
 import { storage } from "../server/storage";
+import { getDatabase, closeDatabase } from "../server/db";
 import { seoAnalyzer } from "../server/services/seo-analyzer";
 import { insertSiteSchema, insertAnalysisSchema } from "../shared/schema";
 import { z } from "zod";
@@ -291,13 +292,18 @@ async function getApp() {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
+    // Ensure fresh database connection for each request in serverless
+    const db = getDatabase();
+    log(`Handler processing ${req.method} ${req.url}`, "vercel");
+    
     const app = await getApp();
     return app(req, res);
   } catch (error) {
     console.error("Handler error:", error);
     return res.status(500).json({ 
       message: "Internal server error",
-      error: error instanceof Error ? error.message : "Unknown error"
+      error: error instanceof Error ? error.message : "Unknown error",
+      stack: process.env.NODE_ENV === 'development' ? (error as Error).stack : undefined
     });
   }
 }
