@@ -14,7 +14,11 @@ console.log("🔧 Environment check:", {
 import express, { type Request, Response, NextFunction } from "express";
 import { z } from "zod";
 
-// All modules are now loaded individually within each route handler for better error isolation
+// Static imports for Vercel serverless compatibility
+import { storage } from "../server/storage";
+import { getDatabase } from "../server/db";
+import { seoAnalyzer } from "../server/services/seo-analyzer";
+import { insertSiteSchema, insertAnalysisSchema } from "../shared/schema";
 
 let app: express.Application | null = null;
 
@@ -33,8 +37,7 @@ async function registerApiRoutes(app: express.Application): Promise<void> {
   // Health check endpoint - test basic functionality
   app.get("/api/health", async (req, res) => {
     try {
-      // Test database import and connection
-      const { getDatabase } = await import("../server/db");
+      // Test database connection with static import
       const db = getDatabase();
       
       res.json({ 
@@ -57,28 +60,21 @@ async function registerApiRoutes(app: express.Application): Promise<void> {
   app.get("/api/test-db", async (req, res) => {
     try {
       log(`🧪 Testing database operations...`, "db-test");
-      
-      const { storage } = await import("../server/storage");
-      log(`✅ Storage module imported`, "db-test");
+      log(`✅ Storage module available (static import)`, "db-test");
       
       // Test read operation
-      try {
-        const sites = await storage.getAllSites();
-        log(`✅ Database read successful - found ${sites.length} sites`, "db-test");
-        
-        res.json({
-          status: "success",
-          message: "Database operations working",
-          sites_count: sites.length,
-          test_results: {
-            read_operation: "✅ Success",
-            connection_type: process.env.VERCEL ? "HTTP (Vercel)" : "WebSocket (Local)"
-          }
-        });
-      } catch (dbError) {
-        log(`❌ Database read failed: ${dbError instanceof Error ? dbError.message : 'Unknown error'}`, "db-test");
-        throw dbError;
-      }
+      const sites = await storage.getAllSites();
+      log(`✅ Database read successful - found ${sites.length} sites`, "db-test");
+      
+      res.json({
+        status: "success",
+        message: "Database operations working",
+        sites_count: sites.length,
+        test_results: {
+          read_operation: "✅ Success",
+          connection_type: process.env.VERCEL ? "HTTP (Vercel)" : "WebSocket (Local)"
+        }
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       log(`❌ Database test failed: ${errorMessage}`, "db-test");
@@ -119,7 +115,6 @@ async function registerApiRoutes(app: express.Application): Promise<void> {
 
       // Test database access
       try {
-        const { storage } = await import("../server/storage");
         const sites = await storage.getAllSites();
         log(`✅ Database accessed successfully, found ${sites.length} sites`, "test");
       } catch (dbError) {
@@ -213,7 +208,6 @@ async function registerApiRoutes(app: express.Application): Promise<void> {
   // Sites endpoints
   app.get("/api/sites", async (req, res) => {
     try {
-      const { storage } = await import("../server/storage");
       const sites = await storage.getAllSites();
       res.json(sites);
     } catch (error) {
@@ -225,28 +219,19 @@ async function registerApiRoutes(app: express.Application): Promise<void> {
   app.post("/api/sites", async (req, res) => {
     try {
       log(`🔧 Starting site creation with data: ${JSON.stringify(req.body)}`, "sites");
+      log(`✅ Modules available (static imports)`, "sites");
       
-      // Test basic imports first
-      try {
-        const { storage } = await import("../server/storage");
-        const { insertSiteSchema } = await import("../shared/schema");
-        log(`✅ Modules imported successfully`, "sites");
-        
-        // Test schema validation
-        log(`🔍 Validating site data against schema...`, "sites");
-        const siteData = insertSiteSchema.parse(req.body);
-        log(`✅ Schema validation passed. Site data: ${JSON.stringify(siteData)}`, "sites");
-        
-        // Test database operation
-        log(`💾 Attempting to create site in database...`, "sites");
-        const site = await storage.createSite(siteData);
-        log(`✅ Site created successfully: ${JSON.stringify(site)}`, "sites");
-        
-        res.json(site);
-      } catch (importError) {
-        log(`❌ Module import failed: ${importError instanceof Error ? importError.message : 'Unknown error'}`, "sites");
-        throw importError;
-      }
+      // Test schema validation
+      log(`🔍 Validating site data against schema...`, "sites");
+      const siteData = insertSiteSchema.parse(req.body);
+      log(`✅ Schema validation passed. Site data: ${JSON.stringify(siteData)}`, "sites");
+      
+      // Test database operation
+      log(`💾 Attempting to create site in database...`, "sites");
+      const site = await storage.createSite(siteData);
+      log(`✅ Site created successfully: ${JSON.stringify(site)}`, "sites");
+      
+      res.json(site);
     } catch (error) {
       if (error instanceof z.ZodError) {
         log(`❌ Schema validation failed: ${JSON.stringify(error.errors)}`, "sites");
@@ -314,7 +299,6 @@ async function registerApiRoutes(app: express.Application): Promise<void> {
   // Analysis endpoints
   app.get("/api/analyses", async (req, res) => {
     try {
-      const { storage } = await import("../server/storage");
       const analyses = await storage.getAllAnalyses();
       res.json(analyses);
     } catch (error) {
@@ -325,8 +309,6 @@ async function registerApiRoutes(app: express.Application): Promise<void> {
 
   app.post("/api/analyses", async (req, res) => {
     try {
-      const { storage } = await import("../server/storage");
-      const { seoAnalyzer } = await import("../server/services/seo-analyzer");
       
       const { url } = req.body;
       if (!url) {
