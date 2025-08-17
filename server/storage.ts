@@ -305,7 +305,7 @@ export class DatabaseStorage implements IStorage {
     .groupBy(sql`DATE(${analyses.createdAt})`)
     .orderBy(sql`DATE(${analyses.createdAt})`);
 
-    return results.map(row => ({
+    return results.map((row: any) => ({
       date: row.date,
       seoScore: Math.round(Number(row.avgSeoScore) || 0),
       pageSpeed: Math.round(Number(row.avgPageSpeed) || 0),
@@ -325,7 +325,7 @@ export class DatabaseStorage implements IStorage {
 
     // Group by site and get the most recent analysis for each
     const siteMap = new Map();
-    latestAnalyses.forEach(analysis => {
+    latestAnalyses.forEach((analysis: any) => {
       if (!siteMap.has(analysis.siteId) || 
           new Date(analysis.createdAt) > new Date(siteMap.get(analysis.siteId).createdAt)) {
         siteMap.set(analysis.siteId, analysis);
