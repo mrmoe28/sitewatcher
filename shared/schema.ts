@@ -13,7 +13,7 @@ export const users = pgTable("users", {
 
 export const sites = pgTable("sites", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  url: text("url").notNull(),
+  url: text("url").notNull().unique(),
   domain: text("domain").notNull(),
   created_at: timestamp("created_at").defaultNow().notNull(),
 });
