@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-async function queryDatabase(query: string, params: any[] = []): Promise<any> {
+async function queryDatabase(query: string, params: any[] = [], retries: number = 2): Promise<any> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
     throw new Error('DATABASE_URL environment variable is not set');
@@ -18,42 +18,69 @@ async function queryDatabase(query: string, params: any[] = []): Promise<any> {
     params
   };
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-  
-  try {
-    const response = await fetch(`https://${url.hostname}/sql`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${url.password}`,
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal
-    });
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout (reduced for Vercel)
     
-    clearTimeout(timeoutId);
+    try {
+      console.log(`Database query attempt ${attempt + 1}/${retries + 1}: ${query.substring(0, 50)}...`);
+      
+      const response = await fetch(`https://${url.hostname}/sql`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${url.password}`,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => 'Unable to read error response');
-      throw new Error(`Database query failed (${response.status}): ${errorText}`);
-    }
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unable to read error response');
+        if (attempt === retries) {
+          throw new Error(`Database query failed (${response.status}): ${errorText}`);
+        }
+        console.log(`Database query attempt ${attempt + 1} failed, retrying...`);
+        continue;
+      }
 
-    const result = await response.json();
-    return result.rows || [];
-  } catch (error) {
-    clearTimeout(timeoutId);
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('Database query timed out after 10 seconds');
+      const result = await response.json();
+      console.log(`Database query successful on attempt ${attempt + 1}`);
+      return result.rows || [];
+    } catch (error) {
+      clearTimeout(timeoutId);
+      
+      if (error instanceof Error && error.name === 'AbortError') {
+        if (attempt === retries) {
+          throw new Error('Database query timed out after 8 seconds');
+        }
+        console.log(`Database query timeout on attempt ${attempt + 1}, retrying...`);
+        continue;
+      }
+      
+      if (attempt === retries) {
+        throw error;
+      }
+      console.log(`Database query error on attempt ${attempt + 1}, retrying:`, error);
     }
-    throw error;
   }
+  
+  throw new Error('Database query failed after all retries');
 }
 
 async function performSEOAnalysis(url: string, analysisId: string): Promise<void> {
   try {
     console.log(`[SEO-${analysisId}] Starting SEO analysis for ${url}`);
     
+    // Update status to running
+    await queryDatabase(`
+      UPDATE analyses 
+      SET status = $1, progress = $2, status_message = $3
+      WHERE id = $4
+    `, ['running', 10, 'Starting analysis...', analysisId]);
+
     const apiKey = process.env.GOOGLE_PAGESPEED_API_KEY;
     if (!apiKey) {
       console.error(`[SEO-${analysisId}] Missing Google PageSpeed API key`);
@@ -65,19 +92,44 @@ async function performSEOAnalysis(url: string, analysisId: string): Promise<void
       return;
     }
 
-    const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&key=${apiKey}&category=seo`;
+    // Update progress
+    await queryDatabase(`
+      UPDATE analyses 
+      SET progress = $1, status_message = $2
+      WHERE id = $3
+    `, [25, 'Connecting to Google PageSpeed API...', analysisId]);
+
+    const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&key=${apiKey}&category=seo&category=performance`;
     
     console.log(`[SEO-${analysisId}] Calling Google PageSpeed API`);
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 20000); // 20 second timeout (reduced for Vercel)
     
+    // Update progress
+    await queryDatabase(`
+      UPDATE analyses 
+      SET progress = $1, status_message = $2
+      WHERE id = $3
+    `, [50, 'Running Google PageSpeed analysis...', analysisId]);
+
     const response = await fetch(apiUrl, {
-      signal: controller.signal
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'SiteWatcher/1.0'
+      }
     });
     clearTimeout(timeoutId);
     
     if (response.ok) {
       const data = await response.json();
+      
+      // Update progress
+      await queryDatabase(`
+        UPDATE analyses 
+        SET progress = $1, status_message = $2
+        WHERE id = $3
+      `, [75, 'Processing results...', analysisId]);
+      
       const seoScore = Math.round((data.lighthouseResult?.categories?.seo?.score || 0) * 100);
       const pageSpeed = Math.round((data.lighthouseResult?.categories?.performance?.score || 0) * 100);
       
@@ -93,22 +145,47 @@ async function performSEOAnalysis(url: string, analysisId: string): Promise<void
             status_message = $6,
             raw_data = $7
         WHERE id = $8
-      `, ['completed', 100, seoScore, pageSpeed, Math.floor(Math.random() * 10), 'Analysis completed', JSON.stringify(data), analysisId]);
+      `, ['completed', 100, seoScore, pageSpeed, Math.floor(Math.random() * 10), 'Analysis completed successfully', JSON.stringify(data), analysisId]);
     } else {
-      console.error(`[SEO-${analysisId}] Google API returned ${response.status}: ${response.statusText}`);
+      const errorText = await response.text().catch(() => response.statusText);
+      console.error(`[SEO-${analysisId}] Google API returned ${response.status}: ${errorText}`);
+      
+      let userMessage = 'API request failed';
+      if (response.status === 403) {
+        userMessage = 'Google API key is invalid or lacks permissions';
+      } else if (response.status === 429) {
+        userMessage = 'API rate limit exceeded, please try again later';
+      } else if (response.status === 400) {
+        userMessage = 'Invalid URL provided for analysis';
+      }
+      
       await queryDatabase(`
         UPDATE analyses 
         SET status = $1, status_message = $2
         WHERE id = $3
-      `, ['failed', `API request failed: ${response.statusText}`, analysisId]);
+      `, ['failed', userMessage, analysisId]);
     }
   } catch (error) {
     console.error(`[SEO-${analysisId}] Analysis failed:`, error);
+    
+    let errorMessage = 'Analysis failed due to unexpected error';
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        errorMessage = 'Analysis timed out after 20 seconds';
+      } else if (error.message.includes('fetch')) {
+        errorMessage = 'Network error occurred during analysis';
+      } else {
+        errorMessage = `Analysis failed: ${error.message}`;
+      }
+    }
+    
     await queryDatabase(`
       UPDATE analyses 
       SET status = $1, status_message = $2
       WHERE id = $3
-    `, ['failed', `Analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`, analysisId]);
+    `, ['failed', errorMessage, analysisId]).catch(dbError => {
+      console.error(`[SEO-${analysisId}] Failed to update analysis status after error:`, dbError);
+    });
   }
 }
 
@@ -116,6 +193,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const requestId = Math.random().toString(36).substring(7);
   
   try {
+    // First, validate environment setup
+    console.log(`[${requestId}] Environment check:`, {
+      DATABASE_URL: !!process.env.DATABASE_URL,
+      GOOGLE_PAGESPEED_API_KEY: !!process.env.GOOGLE_PAGESPEED_API_KEY,
+      VERCEL: !!process.env.VERCEL,
+      NODE_ENV: process.env.NODE_ENV
+    });
+
+    if (!process.env.DATABASE_URL) {
+      console.error(`[${requestId}] Missing DATABASE_URL environment variable`);
+      return res.status(500).json({
+        message: "Server configuration error: Database not configured",
+        requestId,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    if (!process.env.GOOGLE_PAGESPEED_API_KEY) {
+      console.error(`[${requestId}] Missing GOOGLE_PAGESPEED_API_KEY environment variable`);
+      return res.status(500).json({
+        message: "Server configuration error: Google API key not configured",
+        requestId,
+        timestamp: new Date().toISOString()
+      });
+    }
+
     const { method } = req;
     
     console.log(`[${requestId}] Analyses API request:`, {
