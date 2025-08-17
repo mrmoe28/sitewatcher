@@ -7,34 +7,20 @@ async function testDatabaseConnection(): Promise<{ success: boolean; message: st
       return { success: false, message: 'DATABASE_URL not configured' };
     }
 
-    const url = new URL(databaseUrl);
-    const response = await fetch(`https://${url.hostname}/sql`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${url.password}`,
-      },
-      body: JSON.stringify({
-        query: 'SELECT 1 as test, NOW() as timestamp',
-        params: []
-      }),
-      signal: AbortSignal.timeout(5000)
-    });
-
-    if (response.ok) {
-      const result = await response.json();
-      return { 
-        success: true, 
-        message: 'Database connection successful',
-        details: result.rows?.[0]
-      };
-    } else {
-      const errorText = await response.text().catch(() => response.statusText);
-      return { 
-        success: false, 
-        message: `Database connection failed: ${response.status} ${errorText}`
-      };
-    }
+    // Import Neon serverless client
+    const { neon } = await import('@neondatabase/serverless');
+    
+    // Create Neon SQL client
+    const sql = neon(databaseUrl);
+    
+    // Test basic query
+    const result = await sql`SELECT 1 as test, NOW() as timestamp`;
+    
+    return { 
+      success: true, 
+      message: 'Database connection successful',
+      details: result[0]
+    };
   } catch (error) {
     return { 
       success: false, 

@@ -6,64 +6,30 @@ async function queryDatabase(query: string, params: any[] = [], retries: number 
     throw new Error('DATABASE_URL environment variable is not set');
   }
   
-  let url: URL;
-  try {
-    url = new URL(databaseUrl);
-  } catch (error) {
-    throw new Error(`Invalid DATABASE_URL format: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
+  // Import Neon serverless client for Vercel environment
+  const { neon } = await import('@neondatabase/serverless');
   
-  const body = {
-    query,
-    params
-  };
-
   for (let attempt = 0; attempt <= retries; attempt++) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout (reduced for Vercel)
-    
     try {
       console.log(`Database query attempt ${attempt + 1}/${retries + 1}: ${query.substring(0, 50)}...`);
       
-      const response = await fetch(`https://${url.hostname}/sql`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${url.password}`,
-        },
-        body: JSON.stringify(body),
-        signal: controller.signal
-      });
+      // Create Neon SQL client
+      const sql = neon(databaseUrl);
       
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unable to read error response');
-        if (attempt === retries) {
-          throw new Error(`Database query failed (${response.status}): ${errorText}`);
-        }
-        console.log(`Database query attempt ${attempt + 1} failed, retrying...`);
-        continue;
-      }
-
-      const result = await response.json();
+      // Execute query with parameters
+      const result = await sql(query, params);
+      
       console.log(`Database query successful on attempt ${attempt + 1}`);
-      return result.rows || [];
+      return result;
     } catch (error) {
-      clearTimeout(timeoutId);
-      
-      if (error instanceof Error && error.name === 'AbortError') {
-        if (attempt === retries) {
-          throw new Error('Database query timed out after 8 seconds');
-        }
-        console.log(`Database query timeout on attempt ${attempt + 1}, retrying...`);
-        continue;
-      }
-      
       if (attempt === retries) {
-        throw error;
+        console.error(`Database query failed after all retries:`, error);
+        throw new Error(`Database query failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
       console.log(`Database query error on attempt ${attempt + 1}, retrying:`, error);
+      
+      // Wait a bit before retrying
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
   }
   

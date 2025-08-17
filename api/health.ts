@@ -6,47 +6,15 @@ async function queryDatabase(query: string): Promise<any> {
     throw new Error('DATABASE_URL environment variable is not set');
   }
   
-  let url: URL;
-  try {
-    url = new URL(databaseUrl);
-  } catch (error) {
-    throw new Error(`Invalid DATABASE_URL format: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
+  // Import Neon serverless client
+  const { neon } = await import('@neondatabase/serverless');
   
-  const body = {
-    query,
-    params: []
-  };
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 5000);
+  // Create Neon SQL client
+  const sql = neon(databaseUrl);
   
-  try {
-    const response = await fetch(`https://${url.hostname}/sql`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${url.password}`,
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal
-    });
-    
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => 'Unable to read error response');
-      throw new Error(`Database query failed (${response.status}): ${errorText}`);
-    }
-
-    return response.json();
-  } catch (error) {
-    clearTimeout(timeoutId);
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('Database query timed out after 5 seconds');
-    }
-    throw error;
-  }
+  // Execute query
+  const result = await sql(query);
+  return result;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
