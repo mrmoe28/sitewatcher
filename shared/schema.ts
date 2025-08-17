@@ -80,10 +80,10 @@ export const keywordsRelations = relations(keywords, ({ one }) => ({
 }));
 
 // Insert schemas
-export const insertUserSchema = createInsertSchema(users).omit({
-  id: true,
-  createdAt: true,
-}) as any;
+export const insertUserSchema = createInsertSchema(users).pick({
+  username: true,
+  password: true,
+});
 
 export const insertSiteSchema = createInsertSchema(sites).omit({
   id: true,
