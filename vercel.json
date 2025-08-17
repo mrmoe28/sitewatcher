@@ -2,19 +2,10 @@
   "version": 2,
   "buildCommand": "npm run build:client",
   "outputDirectory": "dist/public",
-  "functions": {
-    "api/index.ts": {
-      "maxDuration": 30
-    }
-  },
   "env": {
     "VERCEL": "1"
   },
   "rewrites": [
-    {
-      "source": "/api/:path*",
-      "destination": "/api/index"
-    },
     {
       "source": "/(.*)",
       "destination": "/index.html"
