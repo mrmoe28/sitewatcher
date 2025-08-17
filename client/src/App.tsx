@@ -11,6 +11,11 @@ import Keywords from "@/pages/keywords";
 import Notes from "@/pages/notes";
 import History from "@/pages/history";
 import Settings from "@/pages/settings";
+import Debug from "@/pages/debug";
+import Profile from "@/pages/profile";
+import Billing from "@/pages/billing";
+import Notifications from "@/pages/notifications";
+import Privacy from "@/pages/privacy";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -24,6 +29,11 @@ function Router() {
       <Route path="/notes" component={Notes} />
       <Route path="/history" component={History} />
       <Route path="/settings" component={Settings} />
+      <Route path="/debug" component={Debug} />
+      <Route path="/profile" component={Profile} />
+      <Route path="/billing" component={Billing} />
+      <Route path="/notifications" component={Notifications} />
+      <Route path="/privacy" component={Privacy} />
       <Route component={NotFound} />
     </Switch>
   );
