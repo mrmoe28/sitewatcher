@@ -1,15 +1,34 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import dotenv from "dotenv";
 
-// Load environment variables
+// Load environment variables first
 dotenv.config();
 
+console.log("🔧 Environment check:", {
+  DATABASE_URL: process.env.DATABASE_URL ? "✅ Set" : "❌ Missing",
+  GOOGLE_PAGESPEED_API_KEY: process.env.GOOGLE_PAGESPEED_API_KEY ? "✅ Set" : "❌ Missing",
+  VERCEL: process.env.VERCEL ? "✅ Vercel environment" : "❌ Local environment",
+  NODE_ENV: process.env.NODE_ENV || "undefined"
+});
+
 import express, { type Request, Response, NextFunction } from "express";
-import { storage } from "../server/storage";
-import { getDatabase, closeDatabase } from "../server/db";
-import { seoAnalyzer } from "../server/services/seo-analyzer";
-import { insertSiteSchema, insertAnalysisSchema } from "../shared/schema";
 import { z } from "zod";
+
+// Import with error handling
+async function loadModules() {
+  try {
+    const { storage } = await import("../server/storage");
+    const { getDatabase } = await import("../server/db");
+    const { seoAnalyzer } = await import("../server/services/seo-analyzer");
+    const { insertSiteSchema, insertAnalysisSchema } = await import("../shared/schema");
+    
+    console.log("✅ All modules loaded successfully");
+    return { storage, getDatabase, seoAnalyzer, insertSiteSchema, insertAnalysisSchema };
+  } catch (error) {
+    console.error("❌ Module loading failed:", error);
+    throw new Error(`Module loading failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
 
 let app: express.Application | null = null;
 
@@ -25,6 +44,143 @@ function log(message: string, source = "api") {
 }
 
 async function registerApiRoutes(app: express.Application): Promise<void> {
+  const modules = await loadModules();
+  const { storage, getDatabase, seoAnalyzer, insertSiteSchema, insertAnalysisSchema } = modules;
+
+  // Health check endpoint
+  app.get("/api/health", async (req, res) => {
+    try {
+      // Test database connection
+      const db = getDatabase();
+      res.json({ 
+        status: "healthy", 
+        database: "connected",
+        environment: process.env.VERCEL ? "vercel" : "local",
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Health check failed:", error);
+      res.status(500).json({ 
+        status: "unhealthy", 
+        error: error instanceof Error ? error.message : "Unknown error" 
+      });
+    }
+  });
+
+  // Simple test endpoint for analysis functionality
+  app.post("/api/test-analysis", async (req, res) => {
+    try {
+      const { url } = req.body;
+      if (!url) {
+        return res.status(400).json({ message: "URL is required" });
+      }
+
+      log(`Testing analysis for URL: ${url}`, "test");
+      
+      // Test URL parsing
+      try {
+        const parsedUrl = new URL(url);
+        const domain = parsedUrl.hostname;
+        log(`✅ URL parsed successfully: ${domain}`, "test");
+      } catch (urlError) {
+        return res.status(400).json({ 
+          message: "Invalid URL", 
+          error: urlError instanceof Error ? urlError.message : "URL parsing failed" 
+        });
+      }
+
+      // Test database access
+      try {
+        const sites = await storage.getAllSites();
+        log(`✅ Database accessed successfully, found ${sites.length} sites`, "test");
+      } catch (dbError) {
+        return res.status(500).json({ 
+          message: "Database access failed", 
+          error: dbError instanceof Error ? dbError.message : "Database error" 
+        });
+      }
+
+      // Test Google API key
+      const apiKey = process.env.GOOGLE_PAGESPEED_API_KEY || process.env.GOOGLE_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ 
+          message: "Google API key not configured",
+          env_check: {
+            GOOGLE_PAGESPEED_API_KEY: !!process.env.GOOGLE_PAGESPEED_API_KEY,
+            GOOGLE_API_KEY: !!process.env.GOOGLE_API_KEY
+          }
+        });
+      }
+
+      res.json({ 
+        status: "success", 
+        message: "All analysis components working",
+        url_domain: new URL(url).hostname,
+        api_key_configured: true,
+        database_accessible: true
+      });
+
+    } catch (error) {
+      console.error("Test analysis failed:", error);
+      res.status(500).json({ 
+        message: "Test analysis failed", 
+        error: error instanceof Error ? error.message : "Unknown error",
+        stack: process.env.NODE_ENV === 'development' ? (error as Error).stack : undefined
+      });
+    }
+  });
+
+  // Test Google PageSpeed API directly
+  app.post("/api/test-pagespeed", async (req, res) => {
+    try {
+      const { url } = req.body;
+      if (!url) {
+        return res.status(400).json({ message: "URL is required" });
+      }
+
+      const apiKey = process.env.GOOGLE_PAGESPEED_API_KEY || process.env.GOOGLE_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ message: "Google API key not configured" });
+      }
+
+      log(`Testing PageSpeed API for: ${url}`, "pagespeed");
+      
+      const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&key=${apiKey}&category=seo`;
+      
+      log(`API URL: ${apiUrl.substring(0, 100)}...`, "pagespeed");
+      
+      const response = await fetch(apiUrl);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        log(`❌ PageSpeed API error: ${response.status} ${response.statusText}`, "pagespeed");
+        return res.status(response.status).json({ 
+          message: "PageSpeed API error", 
+          status: response.status,
+          statusText: response.statusText,
+          error: errorText
+        });
+      }
+
+      const data = await response.json();
+      log(`✅ PageSpeed API success`, "pagespeed");
+      
+      res.json({ 
+        status: "success", 
+        message: "PageSpeed API working",
+        seo_score: data.lighthouseResult?.categories?.seo?.score || 0,
+        has_lighthouse_data: !!data.lighthouseResult
+      });
+
+    } catch (error) {
+      console.error("PageSpeed API test failed:", error);
+      res.status(500).json({ 
+        message: "PageSpeed API test failed", 
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
   // Sites endpoints
   app.get("/api/sites", async (req, res) => {
     try {
@@ -292,18 +448,32 @@ async function getApp() {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
+    log(`🚀 Handler starting: ${req.method} ${req.url}`, "vercel");
+    
+    // Test environment variables first
+    if (!process.env.DATABASE_URL) {
+      console.error("❌ DATABASE_URL not set");
+      return res.status(500).json({ 
+        message: "Database configuration missing",
+        missing_env: "DATABASE_URL"
+      });
+    }
+
     // Ensure fresh database connection for each request in serverless
     const db = getDatabase();
-    log(`Handler processing ${req.method} ${req.url}`, "vercel");
+    log(`✅ Database connection established`, "vercel");
     
     const app = await getApp();
+    log(`✅ Express app ready`, "vercel");
+    
     return app(req, res);
   } catch (error) {
-    console.error("Handler error:", error);
+    console.error("❌ Handler error:", error);
     return res.status(500).json({ 
       message: "Internal server error",
       error: error instanceof Error ? error.message : "Unknown error",
-      stack: process.env.NODE_ENV === 'development' ? (error as Error).stack : undefined
+      stack: process.env.NODE_ENV === 'development' ? (error as Error).stack : undefined,
+      timestamp: new Date().toISOString()
     });
   }
 }
