@@ -1,7 +1,31 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { neon } from '@neondatabase/serverless';
 
-const sql = neon(process.env.DATABASE_URL!);
+async function queryDatabase(query: string, params: any[] = []): Promise<any> {
+  const databaseUrl = process.env.DATABASE_URL!;
+  
+  // Extract connection details from DATABASE_URL
+  const url = new URL(databaseUrl);
+  const body = {
+    query,
+    params
+  };
+
+  const response = await fetch(`https://${url.hostname}/sql`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${url.password}`,
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Database query failed: ${response.statusText}`);
+  }
+
+  const result = await response.json();
+  return result.rows || [];
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -9,11 +33,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     switch (method) {
       case 'GET':
-        const sites = await sql`
-          SELECT id, url, domain, created_at as "createdAt"
+        const sites = await queryDatabase(`
+          SELECT id, url, domain, created_at as createdAt
           FROM sites 
           ORDER BY created_at DESC
-        `;
+        `);
         return res.status(200).json(sites);
 
       case 'POST':
@@ -25,12 +49,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           });
         }
 
-        const [newSite] = await sql`
+        const newSites = await queryDatabase(`
           INSERT INTO sites (url, domain) 
-          VALUES (${url}, ${domain})
-          RETURNING id, url, domain, created_at as "createdAt"
-        `;
-        return res.status(201).json(newSite);
+          VALUES ($1, $2)
+          RETURNING id, url, domain, created_at as createdAt
+        `, [url, domain]);
+        
+        return res.status(201).json(newSites[0]);
 
       case 'DELETE':
         const { id } = req.query;
@@ -39,7 +64,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(400).json({ message: "Site ID is required" });
         }
 
-        await sql`DELETE FROM sites WHERE id = ${id as string}`;
+        await queryDatabase('DELETE FROM sites WHERE id = $1', [id as string]);
         return res.status(200).json({ message: "Site deleted successfully" });
 
       default:

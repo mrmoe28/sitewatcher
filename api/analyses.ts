@@ -1,7 +1,31 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { neon } from '@neondatabase/serverless';
 
-const sql = neon(process.env.DATABASE_URL!);
+async function queryDatabase(query: string, params: any[] = []): Promise<any> {
+  const databaseUrl = process.env.DATABASE_URL!;
+  
+  // Extract connection details from DATABASE_URL
+  const url = new URL(databaseUrl);
+  const body = {
+    query,
+    params
+  };
+
+  const response = await fetch(`https://${url.hostname}/sql`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${url.password}`,
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Database query failed: ${response.statusText}`);
+  }
+
+  const result = await response.json();
+  return result.rows || [];
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -9,24 +33,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     switch (method) {
       case 'GET':
-        const analyses = await sql`
+        const analyses = await queryDatabase(`
           SELECT 
             a.id, 
-            a.site_id as "siteId", 
-            a.seo_score as "seoScore", 
-            a.page_speed as "pageSpeed", 
+            a.site_id as siteId, 
+            a.seo_score as seoScore, 
+            a.page_speed as pageSpeed, 
             a.issues, 
             a.status, 
             a.progress, 
-            a.status_message as "statusMessage", 
-            a.raw_data as "rawData", 
-            a.created_at as "createdAt",
+            a.status_message as statusMessage, 
+            a.raw_data as rawData, 
+            a.created_at as createdAt,
             s.url,
             s.domain
           FROM analyses a
           LEFT JOIN sites s ON a.site_id = s.id
           ORDER BY a.created_at DESC
-        `;
+        `);
         return res.status(200).json(analyses);
 
       case 'POST':
@@ -45,19 +69,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // Create or get site
-        const [site] = await sql`
+        const sites = await queryDatabase(`
           INSERT INTO sites (url, domain) 
-          VALUES (${url}, ${domain})
+          VALUES ($1, $2)
           ON CONFLICT (url) DO UPDATE SET domain = EXCLUDED.domain
           RETURNING id
-        `;
+        `, [url, domain]);
+        const site = sites[0];
 
         // Create analysis
-        const [analysis] = await sql`
+        const analyses = await queryDatabase(`
           INSERT INTO analyses (site_id, status, progress, status_message) 
-          VALUES (${site.id}, 'pending', 0, 'Analysis queued')
-          RETURNING id, site_id as "siteId", status, progress, status_message as "statusMessage", created_at as "createdAt"
-        `;
+          VALUES ($1, $2, $3, $4)
+          RETURNING id, site_id as siteId, status, progress, status_message as statusMessage, created_at as createdAt
+        `, [site.id, 'pending', 0, 'Analysis queued']);
+        const analysis = analyses[0];
 
         // Start SEO analysis (simplified for Vercel)
         setTimeout(async () => {
@@ -73,32 +99,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               const seoScore = Math.round((data.lighthouseResult?.categories?.seo?.score || 0) * 100);
               const pageSpeed = Math.round((data.lighthouseResult?.categories?.performance?.score || 0) * 100);
               
-              await sql`
+              await queryDatabase(`
                 UPDATE analyses 
-                SET status = 'completed', 
-                    progress = 100, 
-                    seo_score = ${seoScore}, 
-                    page_speed = ${pageSpeed},
-                    issues = ${Math.floor(Math.random() * 10)},
-                    status_message = 'Analysis completed',
-                    raw_data = ${JSON.stringify(data)}
-                WHERE id = ${analysis.id}
-              `;
+                SET status = $1, 
+                    progress = $2, 
+                    seo_score = $3, 
+                    page_speed = $4,
+                    issues = $5,
+                    status_message = $6,
+                    raw_data = $7
+                WHERE id = $8
+              `, ['completed', 100, seoScore, pageSpeed, Math.floor(Math.random() * 10), 'Analysis completed', JSON.stringify(data), analysis.id]);
             } else {
-              await sql`
+              await queryDatabase(`
                 UPDATE analyses 
-                SET status = 'failed', 
-                    status_message = 'API request failed'
-                WHERE id = ${analysis.id}
-              `;
+                SET status = $1, 
+                    status_message = $2
+                WHERE id = $3
+              `, ['failed', 'API request failed', analysis.id]);
             }
           } catch (error) {
-            await sql`
+            await queryDatabase(`
               UPDATE analyses 
-              SET status = 'failed', 
-                  status_message = ${`Analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`}
-              WHERE id = ${analysis.id}
-            `;
+              SET status = $1, 
+                  status_message = $2
+              WHERE id = $3
+            `, ['failed', `Analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`, analysis.id]);
           }
         }, 1000);
 
@@ -111,7 +137,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(400).json({ message: "Analysis ID is required" });
         }
 
-        await sql`DELETE FROM analyses WHERE id = ${id as string}`;
+        await queryDatabase('DELETE FROM analyses WHERE id = $1', [id as string]);
         return res.status(200).json({ message: "Analysis deleted successfully" });
 
       default:

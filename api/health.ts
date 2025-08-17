@@ -1,11 +1,35 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { neon } from '@neondatabase/serverless';
+
+async function queryDatabase(query: string): Promise<any> {
+  const databaseUrl = process.env.DATABASE_URL!;
+  
+  // Extract connection details from DATABASE_URL
+  const url = new URL(databaseUrl);
+  const body = {
+    query,
+    params: []
+  };
+
+  const response = await fetch(`https://${url.hostname}/sql`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${url.password}`,
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Database query failed: ${response.statusText}`);
+  }
+
+  return response.json();
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    // Test database connection
-    const sql = neon(process.env.DATABASE_URL!);
-    await sql`SELECT 1 as test`;
+    // Test database connection with simple query
+    await queryDatabase('SELECT 1 as test');
     
     return res.status(200).json({ 
       status: "healthy", 
