@@ -104,9 +104,9 @@ export function RecentAnalyses({ onAnalysisStart }: RecentAnalysesProps) {
                 </td>
               </tr>
             ) : (
-              (analyses as Analysis[]).map((analysis) => {
-                const domain = analysis.site?.domain || new URL(analysis.site?.url || "").hostname;
-                const speedBadge = getSpeedBadge(analysis.pageSpeed || 0);
+              (analyses as any[]).map((analysis: any) => {
+                const domain = analysis.domain || new URL(analysis.url || "").hostname;
+                const speedBadge = getSpeedBadge(analysis.page_speed || 0);
                 
                 return (
                   <tr key={analysis.id} data-testid={`analysis-row-${analysis.id}`}>
@@ -120,7 +120,7 @@ export function RecentAnalyses({ onAnalysisStart }: RecentAnalysesProps) {
                             {domain}
                           </div>
                           <div className="text-sm text-gray-500 dark:text-gray-400 truncate max-w-xs">
-                            {analysis.site?.url}
+                            {analysis.url}
                           </div>
                         </div>
                       </div>
@@ -129,11 +129,11 @@ export function RecentAnalyses({ onAnalysisStart }: RecentAnalysesProps) {
                       {analysis.status === "completed" ? (
                         <div className="flex items-center">
                           <span className="text-sm font-medium text-gray-900 dark:text-white">
-                            {analysis.seoScore || 0}
+                            {analysis.seo_score || 0}
                           </span>
                           <div className="ml-2 w-16 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                             <Progress 
-                              value={analysis.seoScore || 0} 
+                              value={analysis.seo_score || 0} 
                               className="h-2 w-16"
                             />
                           </div>
@@ -155,7 +155,7 @@ export function RecentAnalyses({ onAnalysisStart }: RecentAnalysesProps) {
                       {analysis.issues || 0}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                      {formatDate(analysis.createdAt)}
+                      {formatDate(analysis.created_at)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <Button

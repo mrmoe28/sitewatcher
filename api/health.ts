@@ -1,67 +1,58 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-async function queryDatabase(query: string): Promise<any> {
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) {
-    throw new Error('DATABASE_URL environment variable is not set');
-  }
-  
-  // Import Neon serverless client
-  const { neon } = await import('@neondatabase/serverless');
-  
-  // Create Neon SQL client
-  const sql = neon(databaseUrl);
-  
-  // Execute query
-  const result = await sql(query);
-  return result;
-}
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  if (req.method !== 'GET') {
+    res.setHeader('Allow', ['GET']);
+    return res.status(405).json({ message: `Method ${req.method} not allowed` });
+  }
+
   const requestId = Math.random().toString(36).substring(7);
   
   try {
-    console.log(`[${requestId}] Health check started`, {
-      method: req.method,
-      url: req.url,
-      headers: Object.keys(req.headers),
-      environment: {
-        VERCEL: !!process.env.VERCEL,
-        DATABASE_URL: !!process.env.DATABASE_URL
-      }
-    });
+    console.log(`[${requestId}] Health check started`);
 
-    // Test database connection with simple query
-    console.log(`[${requestId}] Testing database connection`);
-    const dbResult = await queryDatabase('SELECT 1 as test');
-    console.log(`[${requestId}] Database test successful:`, dbResult);
-    
-    const response = { 
-      status: "healthy", 
-      database: "connected",
-      environment: "vercel",
+    // Basic environment checks
+    const healthStatus = {
+      status: 'healthy',
+      database: process.env.DATABASE_URL ? 'configured' : 'missing',
+      google_api: process.env.GOOGLE_PAGESPEED_API_KEY ? 'configured' : 'missing',
+      environment: process.env.VERCEL ? 'vercel' : 'local',
       timestamp: new Date().toISOString(),
       requestId
     };
-    
-    console.log(`[${requestId}] Health check completed successfully`);
-    return res.status(200).json(response);
-  } catch (error) {
-    console.error(`[${requestId}] Health check failed:`, {
-      error: error instanceof Error ? {
-        message: error.message,
-        stack: error.stack,
-        name: error.name
-      } : error,
-      environment: {
-        VERCEL: !!process.env.VERCEL,
-        DATABASE_URL: !!process.env.DATABASE_URL
+
+    // Test database connection if configured
+    if (process.env.DATABASE_URL) {
+      try {
+        const { neon } = await import('@neondatabase/serverless');
+        const sql = neon(process.env.DATABASE_URL);
+        await sql`SELECT 1 as test`;
+        healthStatus.database = 'connected';
+        console.log(`[${requestId}] Database connection successful`);
+      } catch (dbError) {
+        console.error(`[${requestId}] Database connection failed:`, dbError);
+        healthStatus.database = 'error';
+        healthStatus.status = 'degraded';
       }
-    });
+    }
+
+    console.log(`[${requestId}] Health check completed:`, healthStatus);
+    return res.status(200).json(healthStatus);
     
-    return res.status(500).json({ 
-      status: "unhealthy", 
-      error: error instanceof Error ? error.message : "Unknown error",
+  } catch (error) {
+    console.error(`[${requestId}] Health check failed:`, error);
+    return res.status(500).json({
+      status: 'unhealthy',
+      error: error instanceof Error ? error.message : 'Unknown error',
       timestamp: new Date().toISOString(),
       requestId
     });

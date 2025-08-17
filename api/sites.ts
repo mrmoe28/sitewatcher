@@ -6,52 +6,23 @@ async function queryDatabase(query: string, params: any[] = []): Promise<any> {
     throw new Error('DATABASE_URL environment variable is not set');
   }
   
-  let url: URL;
-  try {
-    url = new URL(databaseUrl);
-  } catch (error) {
-    throw new Error(`Invalid DATABASE_URL format: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
+  const { neon } = await import('@neondatabase/serverless');
+  const sql = neon(databaseUrl);
   
-  const body = {
-    query,
-    params
-  };
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000);
-  
-  try {
-    const response = await fetch(`https://${url.hostname}/sql`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${url.password}`,
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal
-    });
-    
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => 'Unable to read error response');
-      throw new Error(`Database query failed (${response.status}): ${errorText}`);
-    }
-
-    const result = await response.json();
-    return result.rows || [];
-  } catch (error) {
-    clearTimeout(timeoutId);
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('Database query timed out after 10 seconds');
-    }
-    throw error;
-  }
+  return await sql(query, params);
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const requestId = Math.random().toString(36).substring(7);
+  
+  // CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
   
   try {
     const { method } = req;
@@ -67,7 +38,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     switch (method) {
       case 'GET':
         const sites = await queryDatabase(`
-          SELECT id, url, domain, created_at as createdAt
+          SELECT id, url, domain, created_at
           FROM sites 
           ORDER BY created_at DESC
         `);
@@ -98,7 +69,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const newSites = await queryDatabase(`
           INSERT INTO sites (url, domain) 
           VALUES ($1, $2)
-          RETURNING id, url, domain, created_at as createdAt
+          ON CONFLICT (url) DO UPDATE SET domain = EXCLUDED.domain
+          RETURNING id, url, domain, created_at
         `, [url, domain]);
         
         return res.status(201).json(newSites[0]);

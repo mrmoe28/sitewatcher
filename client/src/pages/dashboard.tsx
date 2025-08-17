@@ -27,7 +27,7 @@ export default function Dashboard() {
     setCurrentAnalysis(analysisId);
   };
 
-  const isLoading = (currentAnalysisData as Analysis)?.status === "pending" || (currentAnalysisData as Analysis)?.status === "running";
+  const isLoading = (currentAnalysisData as any)?.status === "pending" || (currentAnalysisData as any)?.status === "running";
 
   return (
     <PageLayout 
@@ -39,8 +39,8 @@ export default function Dashboard() {
         
         {isLoading && (
           <LoadingState 
-            progress={(currentAnalysisData as Analysis)?.progress || 0}
-            status={(currentAnalysisData as Analysis)?.statusMessage || "Starting analysis..."}
+            progress={(currentAnalysisData as any)?.progress || 0}
+            status={(currentAnalysisData as any)?.status_message || "Starting analysis..."}
           />
         )}
         

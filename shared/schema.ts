@@ -15,40 +15,40 @@ export const sites = pgTable("sites", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   url: text("url").notNull(),
   domain: text("domain").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  created_at: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const analyses = pgTable("analyses", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  siteId: varchar("site_id").notNull().references(() => sites.id, { onDelete: "cascade" }),
-  seoScore: integer("seo_score"),
-  pageSpeed: integer("page_speed"),
+  site_id: varchar("site_id").notNull().references(() => sites.id, { onDelete: "cascade" }),
+  seo_score: integer("seo_score"),
+  page_speed: integer("page_speed"),
   issues: integer("issues").default(0),
   status: text("status").notNull().default("pending"), // pending, running, completed, failed
   progress: integer("progress").default(0),
-  statusMessage: text("status_message"),
-  rawData: jsonb("raw_data"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  status_message: text("status_message"),
+  raw_data: jsonb("raw_data"),
+  created_at: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const recommendations = pgTable("recommendations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  analysisId: varchar("analysis_id").notNull().references(() => analyses.id, { onDelete: "cascade" }),
+  analysis_id: varchar("analysis_id").notNull().references(() => analyses.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   description: text("description").notNull(),
   priority: text("priority").notNull(), // high, medium, low
   type: text("type").notNull(), // meta, images, speed, schema, etc.
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  created_at: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const keywords = pgTable("keywords", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  siteId: varchar("site_id").notNull().references(() => sites.id, { onDelete: "cascade" }),
+  site_id: varchar("site_id").notNull().references(() => sites.id, { onDelete: "cascade" }),
   term: text("term").notNull(),
   rank: integer("rank"),
   volume: integer("volume"),
   change: integer("change").default(0),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  created_at: timestamp("created_at").defaultNow().notNull(),
 });
 
 // Relations
@@ -59,7 +59,7 @@ export const sitesRelations = relations(sites, ({ many }) => ({
 
 export const analysesRelations = relations(analyses, ({ one, many }) => ({
   site: one(sites, {
-    fields: [analyses.siteId],
+    fields: [analyses.site_id],
     references: [sites.id],
   }),
   recommendations: many(recommendations),
@@ -67,14 +67,14 @@ export const analysesRelations = relations(analyses, ({ one, many }) => ({
 
 export const recommendationsRelations = relations(recommendations, ({ one }) => ({
   analysis: one(analyses, {
-    fields: [recommendations.analysisId],
+    fields: [recommendations.analysis_id],
     references: [analyses.id],
   }),
 }));
 
 export const keywordsRelations = relations(keywords, ({ one }) => ({
   site: one(sites, {
-    fields: [keywords.siteId],
+    fields: [keywords.site_id],
     references: [sites.id],
   }),
 }));

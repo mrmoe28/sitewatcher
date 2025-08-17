@@ -72,13 +72,9 @@ function mapToApiEndpoint(endpoint: string): string {
     'sites': '/api/sites',
     'analyses': '/api/analyses',
     'health': '/api/health',
-    'test-db': '/api/test-db',
-    'test-analysis': '/api/test-analysis',
-    'test-pagespeed': '/api/test-pagespeed',
-    'dashboard/metrics': '/api/dashboard/metrics',
-    'analytics': '/api/analytics',
-    'analytics/trends': '/api/analytics/trends',
-    'analytics/comparison': '/api/analytics/comparison'
+    'diagnostic': '/api/diagnostic',
+    'simple': '/api/simple',
+    'test': '/api/test'
   };
   
   // Check for exact matches
@@ -86,7 +82,7 @@ function mapToApiEndpoint(endpoint: string): string {
     return endpointMappings[endpoint];
   }
   
-  // Check for pattern matches (e.g., sites/:id)
+  // Check for pattern matches (e.g., analyses/:id)
   for (const [pattern, apiPath] of Object.entries(endpointMappings)) {
     if (endpoint.startsWith(pattern + '/')) {
       const pathSuffix = endpoint.substring(pattern.length);

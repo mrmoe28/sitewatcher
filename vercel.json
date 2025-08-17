@@ -2,9 +2,13 @@
   "version": 2,
   "buildCommand": "npm run build:vercel",
   "outputDirectory": "dist/public",
+  "env": {
+    "VERCEL": "1"
+  },
   "functions": {
     "api/**/*.ts": {
-      "maxDuration": 30
+      "maxDuration": 25,
+      "memory": 512
     }
   },
   "rewrites": [
@@ -13,7 +17,7 @@
       "destination": "/api/$1"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!api).*)",
       "destination": "/index.html"
     }
   ],
@@ -31,9 +35,15 @@
         },
         {
           "key": "Access-Control-Allow-Headers",
-          "value": "Content-Type, Authorization"
+          "value": "Content-Type, Authorization, X-Requested-With"
+        },
+        {
+          "key": "Access-Control-Allow-Credentials",
+          "value": "true"
         }
       ]
     }
-  ]
+  ],
+  "regions": ["iad1"],
+  "framework": null
 }

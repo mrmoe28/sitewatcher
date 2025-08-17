@@ -37,10 +37,10 @@ async function queryDatabase(query: string, params: any[] = [], retries: number 
 }
 
 async function performSEOAnalysis(url: string, analysisId: string): Promise<void> {
-  // Add overall timeout for the entire analysis
+  // Add overall timeout for the entire analysis (reduced for serverless)
   const analysisTimeout = setTimeout(() => {
-    throw new Error('Analysis timed out after 25 seconds');
-  }, 25000);
+    throw new Error('Analysis timed out after 20 seconds');
+  }, 20000);
 
   try {
     console.log(`[SEO-${analysisId}] Starting SEO analysis for ${url}`);
@@ -74,7 +74,7 @@ async function performSEOAnalysis(url: string, analysisId: string): Promise<void
     
     console.log(`[SEO-${analysisId}] Calling Google PageSpeed API`);
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000); // 20 second timeout (reduced for Vercel)
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout for API call
     
     // Update progress
     await queryDatabase(`
@@ -151,11 +151,11 @@ async function performSEOAnalysis(url: string, analysisId: string): Promise<void
     let errorMessage = 'Analysis failed due to unexpected error';
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
-        errorMessage = 'Analysis timed out after 20 seconds';
+        errorMessage = 'Analysis timed out after 15 seconds';
       } else if (error.message.includes('fetch')) {
         errorMessage = 'Network error occurred during analysis';
-      } else if (error.message.includes('timed out after 25 seconds')) {
-        errorMessage = 'Analysis timed out after 25 seconds';
+      } else if (error.message.includes('timed out after 20 seconds')) {
+        errorMessage = 'Analysis timed out after 20 seconds';
       } else {
         errorMessage = `Analysis failed: ${error.message}`;
       }
@@ -173,6 +173,15 @@ async function performSEOAnalysis(url: string, analysisId: string): Promise<void
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const requestId = Math.random().toString(36).substring(7);
+  
+  // CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
   
   try {
     // First, validate environment setup
@@ -216,15 +225,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const analyses = await queryDatabase(`
           SELECT 
             a.id, 
-            a.site_id as siteId, 
-            a.seo_score as seoScore, 
-            a.page_speed as pageSpeed, 
+            a.site_id, 
+            a.seo_score, 
+            a.page_speed, 
             a.issues, 
             a.status, 
             a.progress, 
-            a.status_message as statusMessage, 
-            a.raw_data as rawData, 
-            a.created_at as createdAt,
+            a.status_message, 
+            a.raw_data, 
+            a.created_at,
             s.url,
             s.domain
           FROM analyses a
@@ -286,29 +295,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const analyses = await queryDatabase(`
           INSERT INTO analyses (site_id, status, progress, status_message) 
           VALUES ($1, $2, $3, $4)
-          RETURNING id, site_id as siteId, status, progress, status_message as statusMessage, created_at as createdAt
+          RETURNING id, site_id, status, progress, status_message, created_at
         `, [site.id, 'pending', 0, 'Analysis queued']);
         const analysis = analyses[0];
 
-        // Start SEO analysis in background (Vercel compatible)
-        console.log(`[${requestId}] Starting background SEO analysis for analysis ${analysis.id}`);
+        // Start SEO analysis asynchronously to avoid Vercel timeout
+        console.log(`[${requestId}] Starting async SEO analysis for analysis ${analysis.id}`);
         
-        // Fire and forget - don't await this in serverless
-        // Wrap in additional try-catch to prevent function invocation failures
-        setImmediate(() => {
-          performSEOAnalysis(url, analysis.id).catch(error => {
-            console.error(`[${requestId}] Background SEO analysis failed:`, error);
-            // Update analysis status to failed if background processing fails
-            queryDatabase(`
-              UPDATE analyses 
-              SET status = $1, status_message = $2
-              WHERE id = $3
-            `, ['failed', `Background processing error: ${error instanceof Error ? error.message : 'Unknown error'}`, analysis.id]).catch(dbError => {
-              console.error(`[${requestId}] Failed to update analysis status after background error:`, dbError);
-            });
-          });
+        // Run analysis in background without waiting
+        performSEOAnalysis(url, analysis.id).catch(error => {
+          console.error(`[${requestId}] Background SEO analysis failed:`, error);
         });
 
+        // Return the initial analysis immediately
         return res.status(201).json(analysis);
 
       case 'DELETE':
