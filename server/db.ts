@@ -2,7 +2,6 @@ import { Pool, neonConfig } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-serverless';
 import { drizzle as drizzleNode } from 'drizzle-orm/node-postgres';
 import { Pool as NodePool } from 'pg';
-import ws from "ws";
 import * as schema from "@shared/schema";
 
 // Default to local PostgreSQL for development if no DATABASE_URL is provided
@@ -16,7 +15,12 @@ let db: any;
 
 if (isNeon) {
   // Use Neon serverless configuration for production
-  neonConfig.webSocketConstructor = ws;
+  // In Vercel, WebSocket constructor is automatically provided
+  if (typeof window === 'undefined' && !process.env.VERCEL) {
+    // Only import ws for local development, not in Vercel
+    const ws = require("ws");
+    neonConfig.webSocketConstructor = ws;
+  }
   pool = new Pool({ connectionString: DATABASE_URL });
   db = drizzle({ client: pool, schema });
 } else {
