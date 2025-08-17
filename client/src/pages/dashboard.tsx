@@ -13,11 +13,11 @@ export default function Dashboard() {
   const [currentAnalysis, setCurrentAnalysis] = useState<string | null>(null);
 
   const { data: metrics } = useQuery({
-    queryKey: ["/api/dashboard/metrics"],
+    queryKey: ["/dashboard/metrics"],
   });
 
   const { data: currentAnalysisData } = useQuery({
-    queryKey: ["/api/analyses", currentAnalysis],
+    queryKey: ["/analyses", currentAnalysis],
     enabled: !!currentAnalysis,
     refetchInterval: (data: Analysis | undefined) => 
       data?.status === "pending" || data?.status === "running" ? 2000 : false,

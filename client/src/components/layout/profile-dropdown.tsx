@@ -20,28 +20,40 @@ interface ProfileDropdownProps {
 export function ProfileDropdown({ 
   userInitials = "JD", 
   userName = "John Doe",
-  userEmail = "john@example.com" 
+  userEmail = "john@sitewatcher.com" 
 }: ProfileDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   const handleLogout = () => {
-    // TODO: Implement logout functionality
-    console.log("Logout clicked");
+    // Clear session and redirect to login
+    localStorage.clear();
+    sessionStorage.clear();
+    window.location.href = "/";
   };
 
   const handleProfile = () => {
-    // TODO: Navigate to profile page
-    console.log("Profile clicked");
+    window.location.href = "/profile";
+    setIsOpen(false);
   };
 
   const handleSettings = () => {
-    // TODO: Navigate to settings page
-    console.log("Settings clicked");
+    window.location.href = "/settings";
+    setIsOpen(false);
   };
 
   const handleBilling = () => {
-    // TODO: Navigate to billing page
-    console.log("Billing clicked");
+    window.location.href = "/billing";
+    setIsOpen(false);
+  };
+
+  const handleNotifications = () => {
+    window.location.href = "/notifications";
+    setIsOpen(false);
+  };
+
+  const handlePrivacy = () => {
+    window.location.href = "/privacy";
+    setIsOpen(false);
   };
 
   return (
@@ -88,7 +100,7 @@ export function ProfileDropdown({
           <span>Settings</span>
         </DropdownMenuItem>
         
-        <DropdownMenuItem className="cursor-pointer">
+        <DropdownMenuItem onClick={handleNotifications} className="cursor-pointer">
           <Bell className="mr-2 h-4 w-4" />
           <span>Notifications</span>
           <Badge variant="destructive" className="ml-auto text-xs">
@@ -96,7 +108,7 @@ export function ProfileDropdown({
           </Badge>
         </DropdownMenuItem>
         
-        <DropdownMenuItem className="cursor-pointer">
+        <DropdownMenuItem onClick={handlePrivacy} className="cursor-pointer">
           <Shield className="mr-2 h-4 w-4" />
           <span>Privacy & Security</span>
         </DropdownMenuItem>

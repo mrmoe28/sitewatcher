@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import * as React from "react";
 import { PageLayout } from "@/components/layout/page-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,41 +26,92 @@ import {
 } from "lucide-react";
 
 
-const mockAnalyticsData = {
-  overview: {
-    totalSites: 3,
-    avgSeoScore: 78,
-    avgPageSpeed: 85,
-    totalIssues: 12,
-    trends: {
-      seoScore: 5.2,
-      pageSpeed: -2.1,
-      issues: -8
+// Calculate real analytics data from API responses
+const calculateAnalyticsData = (sites: any[], analyses: any[]) => {
+  if (!sites.length || !analyses.length) {
+    return {
+      overview: {
+        totalSites: 0,
+        avgSeoScore: 0,
+        avgPageSpeed: 0,
+        totalIssues: 0,
+        trends: { seoScore: 0, pageSpeed: 0, issues: 0 },
+        sparklines: {
+          seoScore: [],
+          pageSpeed: [],
+          issues: []
+        }
+      },
+      timeSeriesData: [],
+      siteComparison: []
+    };
+  }
+
+  // Filter completed analyses
+  const completedAnalyses = analyses.filter(a => a.status === 'completed' && (a.seoScore || a.pageSpeed));
+  
+  // Calculate overview metrics
+  const totalSites = sites.length;
+  const avgSeoScore = completedAnalyses.length > 0 
+    ? Math.round(completedAnalyses.reduce((sum, a) => sum + (a.seoScore || 0), 0) / completedAnalyses.length)
+    : 0;
+  const avgPageSpeed = completedAnalyses.length > 0
+    ? Math.round(completedAnalyses.reduce((sum, a) => sum + (a.pageSpeed || 0), 0) / completedAnalyses.length)
+    : 0;
+  const totalIssues = analyses.reduce((sum, a) => sum + (a.issues || 0), 0);
+
+  // Create time series data from analyses
+  const timeSeriesData = completedAnalyses
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    .slice(-5) // Last 5 analyses
+    .map(analysis => ({
+      date: new Date(analysis.createdAt).toISOString().split('T')[0],
+      seoScore: analysis.seoScore || 0,
+      pageSpeed: analysis.pageSpeed || 0,
+      issues: analysis.issues || 0
+    }));
+
+  // Create site comparison data
+  const siteMap = sites.reduce((acc, site) => {
+    acc[site.id] = site;
+    return acc;
+  }, {});
+
+  const siteComparison = completedAnalyses
+    .filter(analysis => siteMap[analysis.siteId])
+    .map(analysis => ({
+      site: siteMap[analysis.siteId].domain,
+      seoScore: analysis.seoScore || 0,
+      pageSpeed: analysis.pageSpeed || 0,
+      issues: analysis.issues || 0
+    }));
+
+  // Generate sparkline data (simplified - using last 5 analyses)
+  const sparklines = {
+    seoScore: timeSeriesData.map(d => ({ value: d.seoScore })),
+    pageSpeed: timeSeriesData.map(d => ({ value: d.pageSpeed })),
+    issues: timeSeriesData.map(d => ({ value: d.issues }))
+  };
+
+  return {
+    overview: {
+      totalSites,
+      avgSeoScore,
+      avgPageSpeed,
+      totalIssues,
+      trends: {
+        seoScore: timeSeriesData.length > 1 ? 
+          ((timeSeriesData[timeSeriesData.length - 1].seoScore - timeSeriesData[0].seoScore) / timeSeriesData[0].seoScore * 100) : 0,
+        pageSpeed: timeSeriesData.length > 1 ? 
+          ((timeSeriesData[timeSeriesData.length - 1].pageSpeed - timeSeriesData[0].pageSpeed) / timeSeriesData[0].pageSpeed * 100) : 0,
+        issues: timeSeriesData.length > 1 ? 
+          ((timeSeriesData[0].issues - timeSeriesData[timeSeriesData.length - 1].issues) / timeSeriesData[0].issues * 100) : 0
+      },
+      sparklines
     },
-    sparklines: {
-      seoScore: [
-        { value: 72 }, { value: 75 }, { value: 78 }, { value: 80 }, { value: 78 }
-      ],
-      pageSpeed: [
-        { value: 88 }, { value: 86 }, { value: 85 }, { value: 87 }, { value: 85 }
-      ],
-      issues: [
-        { value: 15 }, { value: 13 }, { value: 12 }, { value: 10 }, { value: 12 }
-      ]
-    }
-  },
-  timeSeriesData: [
-    { date: "2024-01-01", seoScore: 72, pageSpeed: 88, issues: 15 },
-    { date: "2024-01-08", seoScore: 75, pageSpeed: 86, issues: 13 },
-    { date: "2024-01-15", seoScore: 78, pageSpeed: 85, issues: 12 },
-    { date: "2024-01-22", seoScore: 80, pageSpeed: 87, issues: 10 },
-    { date: "2024-01-29", seoScore: 78, pageSpeed: 85, issues: 12 }
-  ],
-  siteComparison: [
-    { site: "example.com", seoScore: 85, pageSpeed: 92, issues: 3 },
-    { site: "demo.com", seoScore: 72, pageSpeed: 78, issues: 8 },
-    { site: "test.org", seoScore: 77, pageSpeed: 85, issues: 5 }
-  ]
+    timeSeriesData,
+    siteComparison
+  };
 };
 
 export default function Analytics() {
@@ -78,20 +130,27 @@ export default function Analytics() {
 
   // Fetch real sites from API
   const { data: sites = [] } = useQuery({
-    queryKey: ["/api/sites"],
+    queryKey: ["/sites"],
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
-  const { data: analyticsData, isLoading, refetch } = useQuery({
-    queryKey: ["/api/analytics", selectedSite, timeRange],
-    queryFn: () => {
-      // Simulate API delay for demonstration
-      return new Promise(resolve => {
-        setTimeout(() => resolve(mockAnalyticsData), 1500);
-      });
-    },
-    staleTime: 5 * 60 * 1000, // 5 minutes
+  // Fetch real analyses from API
+  const { data: analyses = [] } = useQuery({
+    queryKey: ["/analyses"],
+    staleTime: 2 * 60 * 1000, // 2 minutes
   });
+
+  // Calculate analytics data from real API responses
+  const analyticsData = React.useMemo(() => {
+    return calculateAnalyticsData(sites, analyses);
+  }, [sites, analyses, selectedSite, timeRange]);
+
+  const isLoading = false; // Since we're using real data from existing queries
+  
+  const refetch = () => {
+    // Refetch both sites and analyses
+    window.location.reload();
+  };
 
   const activeOperations = getActiveOperations();
   const refreshOperation = activeOperations.find(op => op.type === "analytics-aggregation");

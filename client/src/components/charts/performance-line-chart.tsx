@@ -241,6 +241,14 @@ export function PerformanceLineChart({
               tickLine={false}
               domain={[0, 100]}
             />
+            <YAxis 
+              yAxisId="right"
+              orientation="right"
+              className="text-xs"
+              axisLine={false}
+              tickLine={false}
+              domain={[0, 'dataMax']}
+            />
             <ChartTooltip content={customTooltip} />
             <ChartLegend content={<ChartLegendContent />} />
             

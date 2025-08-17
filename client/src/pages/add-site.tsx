@@ -23,7 +23,7 @@ export default function AddSite() {
   const createSiteMutation = useMutation({
     mutationFn: async (url: string) => {
       const urlObj = new URL(url);
-      const response = await apiRequest("POST", "/api/analyzer/sites", {
+      const response = await apiRequest("POST", "/sites", {
         url,
         domain: urlObj.hostname
       });
@@ -35,8 +35,8 @@ export default function AddSite() {
         description: `${data.domain} has been added to your monitoring list`,
       });
       // Invalidate site-related queries to refresh data
-      queryClient.invalidateQueries({ queryKey: ["/api/analyzer/sites"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/metrics"] });
+      queryClient.invalidateQueries({ queryKey: ["/sites"] });
+      queryClient.invalidateQueries({ queryKey: ["/dashboard/metrics"] });
       
       if (autoAnalyze) {
         // Start SEO analysis
@@ -58,14 +58,14 @@ export default function AddSite() {
   // SEO analysis mutation
   const analyzeUrlMutation = useMutation({
     mutationFn: async (url: string) => {
-      const response = await apiRequest("POST", "/api/analyzer/analyses", { url });
+      const response = await apiRequest("POST", "/analyses", { url });
       return response.json();
     },
     onSuccess: (data) => {
       setAnalysisId(data.id);
       setShowCrawler(true);
       // Invalidate analysis queries
-      queryClient.invalidateQueries({ queryKey: ["/api/analyzer/analyses"] });
+      queryClient.invalidateQueries({ queryKey: ["/analyses"] });
     },
     onError: (error) => {
       toast({

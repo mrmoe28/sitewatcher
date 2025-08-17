@@ -88,13 +88,13 @@ export default function Notes() {
 
   // Fetch real sites from API
   const { data: sites = [] } = useQuery({
-    queryKey: ["/api/sites"],
+    queryKey: ["/sites"],
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
   // Fetch real analyses from API
   const { data: analyses = [], isLoading: analysesLoading } = useQuery({
-    queryKey: ["/api/analyses"],
+    queryKey: ["/analyses"],
     staleTime: 2 * 60 * 1000, // 2 minutes
   });
 
@@ -113,7 +113,7 @@ export default function Notes() {
   // Delete analysis mutation
   const deleteAnalysisMutation = useMutation({
     mutationFn: async (analysisId: string) => {
-      const response = await apiRequest("DELETE", `/api/analyses/${analysisId}`);
+      const response = await apiRequest("DELETE", `/analyses/${analysisId}`);
       return response.json();
     },
     onSuccess: () => {
@@ -121,7 +121,7 @@ export default function Notes() {
         title: "Analysis Deleted",
         description: "The analysis has been successfully deleted.",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/analyses"] });
+      queryClient.invalidateQueries({ queryKey: ["/analyses"] });
     },
     onError: (error) => {
       toast({
