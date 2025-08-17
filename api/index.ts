@@ -53,6 +53,48 @@ async function registerApiRoutes(app: express.Application): Promise<void> {
     }
   });
 
+  // Database test endpoint - test actual database operations
+  app.get("/api/test-db", async (req, res) => {
+    try {
+      log(`🧪 Testing database operations...`, "db-test");
+      
+      const { storage } = await import("../server/storage");
+      log(`✅ Storage module imported`, "db-test");
+      
+      // Test read operation
+      try {
+        const sites = await storage.getAllSites();
+        log(`✅ Database read successful - found ${sites.length} sites`, "db-test");
+        
+        res.json({
+          status: "success",
+          message: "Database operations working",
+          sites_count: sites.length,
+          test_results: {
+            read_operation: "✅ Success",
+            connection_type: process.env.VERCEL ? "HTTP (Vercel)" : "WebSocket (Local)"
+          }
+        });
+      } catch (dbError) {
+        log(`❌ Database read failed: ${dbError instanceof Error ? dbError.message : 'Unknown error'}`, "db-test");
+        throw dbError;
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      log(`❌ Database test failed: ${errorMessage}`, "db-test");
+      console.error("Database test error:", {
+        message: errorMessage,
+        stack: error instanceof Error ? error.stack : 'No stack trace'
+      });
+      res.status(500).json({
+        status: "failed",
+        message: "Database test failed", 
+        error: errorMessage,
+        details: process.env.NODE_ENV === 'development' ? (error as Error).stack : undefined
+      });
+    }
+  });
+
   // Simple test endpoint for analysis functionality
   app.post("/api/test-analysis", async (req, res) => {
     try {
@@ -182,17 +224,48 @@ async function registerApiRoutes(app: express.Application): Promise<void> {
 
   app.post("/api/sites", async (req, res) => {
     try {
-      const { storage } = await import("../server/storage");
-      const { insertSiteSchema } = await import("../shared/schema");
-      const siteData = insertSiteSchema.parse(req.body);
-      const site = await storage.createSite(siteData);
-      res.json(site);
+      log(`🔧 Starting site creation with data: ${JSON.stringify(req.body)}`, "sites");
+      
+      // Test basic imports first
+      try {
+        const { storage } = await import("../server/storage");
+        const { insertSiteSchema } = await import("../shared/schema");
+        log(`✅ Modules imported successfully`, "sites");
+        
+        // Test schema validation
+        log(`🔍 Validating site data against schema...`, "sites");
+        const siteData = insertSiteSchema.parse(req.body);
+        log(`✅ Schema validation passed. Site data: ${JSON.stringify(siteData)}`, "sites");
+        
+        // Test database operation
+        log(`💾 Attempting to create site in database...`, "sites");
+        const site = await storage.createSite(siteData);
+        log(`✅ Site created successfully: ${JSON.stringify(site)}`, "sites");
+        
+        res.json(site);
+      } catch (importError) {
+        log(`❌ Module import failed: ${importError instanceof Error ? importError.message : 'Unknown error'}`, "sites");
+        throw importError;
+      }
     } catch (error) {
       if (error instanceof z.ZodError) {
+        log(`❌ Schema validation failed: ${JSON.stringify(error.errors)}`, "sites");
         res.status(400).json({ message: "Invalid site data", errors: error.errors });
       } else {
-        console.error("Error creating site:", error);
-        res.status(500).json({ message: "Failed to create site" });
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        const errorStack = error instanceof Error ? error.stack : 'No stack trace';
+        log(`❌ Site creation failed: ${errorMessage}`, "sites");
+        console.error("Detailed error creating site:", {
+          message: errorMessage,
+          stack: errorStack,
+          requestBody: req.body,
+          timestamp: new Date().toISOString()
+        });
+        res.status(500).json({ 
+          message: "Failed to create site",
+          error: errorMessage,
+          details: process.env.NODE_ENV === 'development' ? errorStack : undefined
+        });
       }
     }
   });
