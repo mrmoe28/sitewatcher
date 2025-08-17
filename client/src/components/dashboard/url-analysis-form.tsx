@@ -18,7 +18,7 @@ export function URLAnalysisForm({ onAnalysisStart }: URLAnalysisFormProps) {
 
   const analyzeUrlMutation = useMutation({
     mutationFn: async (url: string) => {
-      const response = await apiRequest("POST", "/api/analyses", { url });
+      const response = await apiRequest("POST", "/api/analyzer/analyses", { url });
       return response.json();
     },
     onSuccess: (data) => {
@@ -27,7 +27,7 @@ export function URLAnalysisForm({ onAnalysisStart }: URLAnalysisFormProps) {
         description: "Your website analysis has been queued and will begin shortly.",
       });
       onAnalysisStart(data.id);
-      queryClient.invalidateQueries({ queryKey: ["/api/analyses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analyzer/analyses"] });
       setUrl("");
     },
     onError: (error) => {

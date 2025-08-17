@@ -40,7 +40,7 @@ export default function Sites() {
 
   // Fetch sites
   const { data: sites = [], isLoading } = useQuery({
-    queryKey: ["/api/sites"],
+    queryKey: ["/api/analyzer/sites"],
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
@@ -55,7 +55,7 @@ export default function Sites() {
         title: "Site Updated",
         description: "Site has been updated successfully",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/sites"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analyzer/sites"] });
       setIsEditDialogOpen(false);
       setEditingSite(null);
     },
@@ -79,7 +79,7 @@ export default function Sites() {
         title: "Site Deleted",
         description: "Site and all related data has been deleted successfully",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/sites"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analyzer/sites"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/metrics"] });
     },
     onError: (error) => {

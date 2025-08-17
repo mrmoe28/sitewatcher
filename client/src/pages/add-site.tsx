@@ -23,7 +23,7 @@ export default function AddSite() {
   const createSiteMutation = useMutation({
     mutationFn: async (url: string) => {
       const urlObj = new URL(url);
-      const response = await apiRequest("POST", "/api/sites", {
+      const response = await apiRequest("POST", "/api/analyzer/sites", {
         url,
         domain: urlObj.hostname
       });
@@ -35,7 +35,7 @@ export default function AddSite() {
         description: `${data.domain} has been added to your monitoring list`,
       });
       // Invalidate site-related queries to refresh data
-      queryClient.invalidateQueries({ queryKey: ["/api/sites"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analyzer/sites"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/metrics"] });
       
       if (autoAnalyze) {
@@ -58,14 +58,14 @@ export default function AddSite() {
   // SEO analysis mutation
   const analyzeUrlMutation = useMutation({
     mutationFn: async (url: string) => {
-      const response = await apiRequest("POST", "/api/analyses", { url });
+      const response = await apiRequest("POST", "/api/analyzer/analyses", { url });
       return response.json();
     },
     onSuccess: (data) => {
       setAnalysisId(data.id);
       setShowCrawler(true);
       // Invalidate analysis queries
-      queryClient.invalidateQueries({ queryKey: ["/api/analyses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analyzer/analyses"] });
     },
     onError: (error) => {
       toast({

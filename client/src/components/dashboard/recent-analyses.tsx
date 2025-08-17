@@ -17,19 +17,19 @@ export function RecentAnalyses({ onAnalysisStart }: RecentAnalysesProps) {
   const queryClient = useQueryClient();
 
   const { data: analyses = [] } = useQuery({
-    queryKey: ["/api/analyses"],
+    queryKey: ["/api/analyzer/analyses"],
   });
 
   const deleteAnalysisMutation = useMutation({
     mutationFn: async (analysisId: string) => {
-      await apiRequest("DELETE", `/api/analyses/${analysisId}`);
+      await apiRequest("DELETE", `/api/analyzer/analyses/${analysisId}`);
     },
     onSuccess: () => {
       toast({
         title: "Analysis Deleted",
         description: "The analysis has been deleted successfully.",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/analyses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analyzer/analyses"] });
     },
     onError: (error) => {
       toast({
