@@ -4,7 +4,6 @@
   "outputDirectory": "dist/public",
   "functions": {
     "api/index.ts": {
-      "memory": 1024,
       "maxDuration": 30
     }
   },
@@ -15,16 +14,10 @@
     {
       "source": "/api/:path*",
       "destination": "/api/index"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/api/index"
     },
     {
-      "src": "/(.*)",
-      "dest": "/index.html"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ],
   "headers": [
