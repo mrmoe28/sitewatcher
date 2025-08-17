@@ -14,21 +14,7 @@ console.log("🔧 Environment check:", {
 import express, { type Request, Response, NextFunction } from "express";
 import { z } from "zod";
 
-// Import with error handling
-async function loadModules() {
-  try {
-    const { storage } = await import("../server/storage");
-    const { getDatabase } = await import("../server/db");
-    const { seoAnalyzer } = await import("../server/services/seo-analyzer");
-    const { insertSiteSchema, insertAnalysisSchema } = await import("../shared/schema");
-    
-    console.log("✅ All modules loaded successfully");
-    return { storage, getDatabase, seoAnalyzer, insertSiteSchema, insertAnalysisSchema };
-  } catch (error) {
-    console.error("❌ Module loading failed:", error);
-    throw new Error(`Module loading failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
-}
+// All modules are now loaded individually within each route handler for better error isolation
 
 let app: express.Application | null = null;
 
@@ -44,14 +30,13 @@ function log(message: string, source = "api") {
 }
 
 async function registerApiRoutes(app: express.Application): Promise<void> {
-  const modules = await loadModules();
-  const { storage, getDatabase, seoAnalyzer, insertSiteSchema, insertAnalysisSchema } = modules;
-
-  // Health check endpoint
+  // Health check endpoint - test basic functionality
   app.get("/api/health", async (req, res) => {
     try {
-      // Test database connection
+      // Test database import and connection
+      const { getDatabase } = await import("../server/db");
       const db = getDatabase();
+      
       res.json({ 
         status: "healthy", 
         database: "connected",
@@ -62,7 +47,8 @@ async function registerApiRoutes(app: express.Application): Promise<void> {
       console.error("Health check failed:", error);
       res.status(500).json({ 
         status: "unhealthy", 
-        error: error instanceof Error ? error.message : "Unknown error" 
+        error: error instanceof Error ? error.message : "Unknown error",
+        stack: process.env.NODE_ENV === 'development' ? (error as Error).stack : undefined
       });
     }
   });
@@ -91,6 +77,7 @@ async function registerApiRoutes(app: express.Application): Promise<void> {
 
       // Test database access
       try {
+        const { storage } = await import("../server/storage");
         const sites = await storage.getAllSites();
         log(`✅ Database accessed successfully, found ${sites.length} sites`, "test");
       } catch (dbError) {
@@ -184,6 +171,7 @@ async function registerApiRoutes(app: express.Application): Promise<void> {
   // Sites endpoints
   app.get("/api/sites", async (req, res) => {
     try {
+      const { storage } = await import("../server/storage");
       const sites = await storage.getAllSites();
       res.json(sites);
     } catch (error) {
@@ -194,6 +182,8 @@ async function registerApiRoutes(app: express.Application): Promise<void> {
 
   app.post("/api/sites", async (req, res) => {
     try {
+      const { storage } = await import("../server/storage");
+      const { insertSiteSchema } = await import("../shared/schema");
       const siteData = insertSiteSchema.parse(req.body);
       const site = await storage.createSite(siteData);
       res.json(site);
@@ -251,6 +241,7 @@ async function registerApiRoutes(app: express.Application): Promise<void> {
   // Analysis endpoints
   app.get("/api/analyses", async (req, res) => {
     try {
+      const { storage } = await import("../server/storage");
       const analyses = await storage.getAllAnalyses();
       res.json(analyses);
     } catch (error) {
@@ -261,6 +252,9 @@ async function registerApiRoutes(app: express.Application): Promise<void> {
 
   app.post("/api/analyses", async (req, res) => {
     try {
+      const { storage } = await import("../server/storage");
+      const { seoAnalyzer } = await import("../server/services/seo-analyzer");
+      
       const { url } = req.body;
       if (!url) {
         return res.status(400).json({ message: "URL is required" });
@@ -459,9 +453,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // Ensure fresh database connection for each request in serverless
-    const db = getDatabase();
-    log(`✅ Database connection established`, "vercel");
+    // Database connections are handled within individual route handlers
     
     const app = await getApp();
     log(`✅ Express app ready`, "vercel");
