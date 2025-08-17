@@ -37,6 +37,11 @@ async function queryDatabase(query: string, params: any[] = [], retries: number 
 }
 
 async function performSEOAnalysis(url: string, analysisId: string): Promise<void> {
+  // Add overall timeout for the entire analysis
+  const analysisTimeout = setTimeout(() => {
+    throw new Error('Analysis timed out after 25 seconds');
+  }, 25000);
+
   try {
     console.log(`[SEO-${analysisId}] Starting SEO analysis for ${url}`);
     
@@ -112,6 +117,9 @@ async function performSEOAnalysis(url: string, analysisId: string): Promise<void
             raw_data = $7
         WHERE id = $8
       `, ['completed', 100, seoScore, pageSpeed, Math.floor(Math.random() * 10), 'Analysis completed successfully', JSON.stringify(data), analysisId]);
+      
+      // Clear timeout on success
+      clearTimeout(analysisTimeout);
     } else {
       const errorText = await response.text().catch(() => response.statusText);
       console.error(`[SEO-${analysisId}] Google API returned ${response.status}: ${errorText}`);
@@ -130,9 +138,15 @@ async function performSEOAnalysis(url: string, analysisId: string): Promise<void
         SET status = $1, status_message = $2
         WHERE id = $3
       `, ['failed', userMessage, analysisId]);
+      
+      // Clear timeout on API error
+      clearTimeout(analysisTimeout);
     }
   } catch (error) {
     console.error(`[SEO-${analysisId}] Analysis failed:`, error);
+    
+    // Clear timeout on any error
+    clearTimeout(analysisTimeout);
     
     let errorMessage = 'Analysis failed due to unexpected error';
     if (error instanceof Error) {
@@ -140,6 +154,8 @@ async function performSEOAnalysis(url: string, analysisId: string): Promise<void
         errorMessage = 'Analysis timed out after 20 seconds';
       } else if (error.message.includes('fetch')) {
         errorMessage = 'Network error occurred during analysis';
+      } else if (error.message.includes('timed out after 25 seconds')) {
+        errorMessage = 'Analysis timed out after 25 seconds';
       } else {
         errorMessage = `Analysis failed: ${error.message}`;
       }
@@ -278,8 +294,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.log(`[${requestId}] Starting background SEO analysis for analysis ${analysis.id}`);
         
         // Fire and forget - don't await this in serverless
-        performSEOAnalysis(url, analysis.id).catch(error => {
-          console.error(`[${requestId}] Background SEO analysis failed:`, error);
+        // Wrap in additional try-catch to prevent function invocation failures
+        setImmediate(() => {
+          performSEOAnalysis(url, analysis.id).catch(error => {
+            console.error(`[${requestId}] Background SEO analysis failed:`, error);
+            // Update analysis status to failed if background processing fails
+            queryDatabase(`
+              UPDATE analyses 
+              SET status = $1, status_message = $2
+              WHERE id = $3
+            `, ['failed', `Background processing error: ${error instanceof Error ? error.message : 'Unknown error'}`, analysis.id]).catch(dbError => {
+              console.error(`[${requestId}] Failed to update analysis status after background error:`, dbError);
+            });
+          });
         });
 
         return res.status(201).json(analysis);
